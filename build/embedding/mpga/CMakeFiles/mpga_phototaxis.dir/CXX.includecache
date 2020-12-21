@@ -1,0 +1,20 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/lucas/argos3/src/Swarm-Robotics-Formation-Control/build/embedding/mpga/mpga_phototaxis_automoc.cpp
+
+/home/lucas/argos3/src/Swarm-Robotics-Formation-Control/embedding/mpga/main.cpp
+iostream
+-
+fstream
+-
+loop_functions/mpga_loop_functions/mpga.h
+-
+loop_functions/mpga_loop_functions/mpga_phototaxis_loop_functions.h
+-
+

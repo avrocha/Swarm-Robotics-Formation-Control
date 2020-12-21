@@ -1,0 +1,1 @@
+/usr/bin/c++  -fPIC -g  -shared -Wl,-soname,libmpga.so -o libmpga.so CMakeFiles/mpga.dir/mpga.cpp.o CMakeFiles/mpga.dir/mpga_loop_functions.cpp.o CMakeFiles/mpga.dir/mpga_automoc.cpp.o  -L/usr/local/lib/argos3 -largos3core_simulator -lrt -Wl,-rpath,/usr/local/lib/argos3 

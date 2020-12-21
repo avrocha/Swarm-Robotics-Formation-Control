@@ -1,0 +1,5 @@
+add_library(footbot_diffusion_tx MODULE footbot_diffusion_tx.h footbot_diffusion_tx.cpp)
+target_link_libraries(footbot_diffusion_tx
+  argos3core_simulator
+  argos3plugin_simulator_footbot
+  argos3plugin_simulator_genericrobot)
