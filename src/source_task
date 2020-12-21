@@ -1,0 +1,230 @@
+#!/bin/bash
+
+CWD=$(pwd)
+
+#
+# Open all editable files
+#
+function open() {
+    EDITOR=${EDITOR:-emacs}
+    ${EDITOR} $(find src -type f \( -name '*.h' -o -name '*.cpp' -o -name '*.c' -o -name CMakeLists.txt -o -name '*.xml' -o -name '*.argos' \) ) $(find src/scripts/ -type f) src/core/config.h.in src/cmake/* src/source_task doc/Doxyfile_*.in doc/api_embedded_* doc/argos3.1 README.asciidoc TODO
+}
+
+#
+# Count lines of code
+#
+function count_lines() {
+    find src -type f \( -name '*.h' -o -name '*.cpp' -o -name '*.c' \) | xargs wc -l
+}
+
+#
+# Create TAGS file
+#
+function tags() {
+    EDITOR=${EDITOR:-emacs}
+    case ${EDITOR} in
+        "emacs")
+            TAGSCMD=$(which etags)
+            ;;
+        "xemacs")
+            TAGSCMD=$(which etags)
+            ;;
+        "vi")
+            TAGSCMD=$(which ctags)
+            ;;
+        "vim")
+            TAGSCMD=$(which ctags)
+            ;;
+        *)
+    esac
+    OUTPUT=build/TAGS
+    rm -f ${OUTPUT}
+    find src -type f \( -name '*.h' -o -name '*.cpp' -o -name '*.c' \) -print | ${TAGSCMD} -o ${OUTPUT} --declarations -I -
+}
+
+#
+# Build code
+#
+function build {
+    ( cd ../build && make -j2 )
+}
+
+#
+# Install stuff in local repository
+#
+function install {
+    rm -rf ../install
+    mkdir ../install
+    ( cd ../build && make DESTDIR=../install install )
+}
+
+#
+# Dump headers in specified file
+#
+function dump_headers {
+    OUTFILE=$1
+    find . -type f -name '*.h' | sort > ${OUTFILE}
+}
+
+#
+# Compare the lists of source and installed headers
+#
+function check_headers {
+    echo "Checking headers..."
+    build > /dev/null
+    install > /dev/null
+    dump_headers source_headers
+    ( cd ../install/usr/include/argos3 && dump_headers ${CWD}/installed_headers )
+    echo "source <, installed >"
+    diff source_headers installed_headers
+    rm -f source_headers installed_headers
+}
+
+#
+# Prints the list of files that still have the license as header
+#
+function check_license {
+    find . -type f \( -name '*.h' -o -name '*.cpp' \) -print0 | xargs -0 -e grep -l -e "This program is free software"
+}
+
+#
+# Fixes for @file statements in all source files
+# Common errors:
+# 1. Files without the @file statement
+# 2. Files without the <...> parentheses
+# 3. Files with the wrong path in them
+#
+function fix_file_doxy {
+    for ORIGPATH in $(find . -type f \( -name '*.h' -o -name '*.cpp' \) -print0 | xargs -0)
+    do
+        # Exclude files coming from external sources
+        echo ${ORIGPATH} | grep -q -e "tinyxml" -e "chipmunk"
+        if [ $? -ne 0 ]; then
+            DOXYPATH="$(echo ${ORIGPATH} | sed 's|^./|argos3/|')"
+            FILELINE="$(grep -e '@file' ${ORIGPATH})"
+            if [ $? -ne 0 ]; then
+            # No @file statement found
+                cat <<EOF > tmpfile
+
+/**
+ * @file <${DOXYPATH}>
+ *
+ * @author Carlo Pinciroli <ilpincy@gmail.com>
+ */
+EOF
+                cat ${ORIGPATH} >> tmpfile
+                mv tmpfile ${ORIGPATH}
+            else
+                # Wrong path
+                echo "${FILELINE}" | grep -qe "${DOXYPATH}"
+                if [ $? -ne 0 ]; then
+                    sed -i "s|${FILELINE}| @file <${DOXYPATH}>|g" ${ORIGPATH}
+                fi
+            fi
+        fi
+    done
+    rm -f tmpfile
+}
+
+#
+# Fix all mentions of argos2
+#
+function fix_argos2 {
+    echo "Creating list of files to change..."
+    LIST=fix_argos2_list.txt
+    find . -type f \( -name '*.h' -o -name '*.cpp' \) -print0 | xargs -0 -e grep -l -e argos2 > ${LIST}
+    echo "Changing argos2 in argos3..."
+    sed -i -e 's|argos2|argos3|g' $(cat ${LIST})
+    echo "Checking once more:"
+    find . -type f \( -name '*.h' -o -name '*.cpp' \) -print0 | xargs -0 -e grep -l -e argos2
+    rm -f ${LIST}
+}
+
+#
+# Fix
+# - "argos3/common" into "argos3/core"
+# - "argos3/simulator" into "argos3/core/simulator"
+#
+function fix_includes {
+    echo "Creating list of files to change..."
+    LIST=fix_includes_list.txt
+    find . -type f \( -name '*.h' -o -name '*.cpp' \) -print0 | xargs -0 -e grep -l -e argos3/common -e argos3/simulator > ${LIST}
+    echo "Changing includes..."
+    sed -i -e 's|argos3/common|argos3/core|g' -e 's|argos3/simulator|argos3/core/simulator|g' $(cat ${LIST})
+    echo "Checking once more:"
+    find . -type f \( -name '*.h' -o -name '*.cpp' \) -print0 | xargs -0 -e grep -l -e argos3/common -e argos3/simulator
+    rm -f ${LIST}
+}
+
+#
+# Fix bullet header include style
+# - #include "LinearMath/btVector3.h" becomes #include <argos3/plugins/simulator/physics_engines/dynamics3d/bullet/LinearMath/btVector3.h>
+# - #include "btVector3.h" is unchanged
+#
+function fix_bullet_includes {
+    BULLET_PATH=argos3/plugins/simulator/physics_engines/dynamics3d/bullet
+    find $BULLET_PATH -type f \( -name '*.h' -o -name '*.cpp' \) |
+    while read TARGET_PATH
+    do
+        sed -i -e "/[[:alnum:]]\/[[:alnum:]]/ s+#include \"\(.*\)\"+#include <$BULLET_PATH/\1>+g ; " $TARGET_PATH
+    done
+}
+
+function fix_email {
+    echo "Creating list of files to change..."
+    LIST=fix_email_list.txt
+    find . -type f \( -name '*.h' -o -name '*.cpp' \) -print0 | xargs -0 -e grep -l -e cpinciro > ${LIST}
+    echo "Changing email..."
+    sed -i -e 's|cpinciro@ulb.ac.be|ilpincy@gmail.com|g' -e 's|cpinciroli@ulb.ac.be|ilpincy@gmail.com|g' -e 's|cpinciroli@iridia.ulb.ac.be|ilpincy@gmail.com|g' $(cat ${LIST})
+    echo "Checking once more:"
+    find . -type f \( -name '*.h' -o -name '*.cpp' \) -print0 | xargs -0 -e grep -l -e cpinciro > ${LIST}
+    rm -f ${LIST}
+}
+
+#
+# Check command line parameters
+#
+if [ $# -ne 1 ]; then
+    echo "Usage:"
+    echo "   $0 { open | check_headers | check_license | fix_file_doxy | fix_argos2 | fix_includes | fix_bullet_includes | fix_email }"
+    exit 1
+fi
+
+#
+# Execute wanted operation
+#
+case $1 in
+    "open")
+        open
+        ;;
+    "count_lines")
+        count_lines
+        ;;
+    "tags")
+        tags
+        ;;
+    "check_headers")
+        check_headers
+        ;;
+    "check_license")
+        check_license
+        ;;
+    "fix_file_doxy")
+        fix_file_doxy
+        ;;
+    "fix_argos2")
+        fix_argos2
+        ;;
+    "fix_includes")
+        fix_includes
+        ;;
+    "fix_bullet_includes")
+        fix_bullet_includes
+        ;;
+    "fix_email")
+        fix_email
+        ;;
+    *)
+        echo "Unrecognized operation \"${OP}\""
+        ;;
+esac

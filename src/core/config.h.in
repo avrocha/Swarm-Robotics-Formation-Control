@@ -1,0 +1,58 @@
+/*
+ * ARGoS version information
+ */
+#define ARGOS_VERSION "@CPACK_PACKAGE_VERSION@"
+#define ARGOS_RELEASE "@CPACK_PACKAGE_RELEASE@"
+#define ARGOS_BUILD_FOR "@ARGOS_BUILD_FOR@"
+
+/*
+ * Whether the build was done with dynamic loading or not
+ */
+#cmakedefine ARGOS_DYNAMIC_LIBRARY_LOADING
+
+/*
+ * System-dependent extension for dynamic libraries
+ */
+#ifdef ARGOS_DYNAMIC_LIBRARY_LOADING
+#  define ARGOS_SHARED_LIBRARY_EXTENSION "@ARGOS_SHARED_LIBRARY_EXTENSION@"
+#  define ARGOS_MODULE_LIBRARY_EXTENSION "@ARGOS_MODULE_LIBRARY_EXTENSION@"
+#endif
+
+/*
+ * Install prefix for ARGoS
+ */
+#define ARGOS_INSTALL_PREFIX "@CMAKE_INSTALL_PREFIX@"
+
+/*
+ * Whether on not to use double
+ */
+#cmakedefine ARGOS_USE_DOUBLE
+
+/*
+ * Whether ARGoS was compiled with Lua support
+ */
+#cmakedefine ARGOS_WITH_LUA
+
+/*
+ * Whether ARGoS was compiled with Qt-OpenGL support
+ */
+#cmakedefine ARGOS_COMPILE_QTOPENGL
+
+/*
+ * Whether ARGoS was compiled with FreeImage support
+ */
+#cmakedefine ARGOS_WITH_FREEIMAGE
+
+/*
+ * Whether to use the ARGoS threadsafe log
+ */
+#cmakedefine ARGOS_THREADSAFE_LOG
+
+/*
+ * Compilation flags
+ */
+#ifndef NDEBUG
+#  define ARGOS_BUILD_FLAGS "@CMAKE_CXX_FLAGS@ @CMAKE_CXX_FLAGS_DEBUG@"
+#else
+#  define ARGOS_BUILD_FLAGS "@CMAKE_CXX_FLAGS@ @CMAKE_CXX_FLAGS_RELEASE@"
+#endif
