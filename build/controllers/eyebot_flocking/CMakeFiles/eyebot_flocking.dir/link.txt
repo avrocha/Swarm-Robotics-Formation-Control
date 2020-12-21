@@ -1,1 +1,0 @@
-/usr/bin/c++  -fPIC -g  -shared  -o libeyebot_flocking.so CMakeFiles/eyebot_flocking.dir/eyebot_flocking.cpp.o CMakeFiles/eyebot_flocking.dir/eyebot_flocking_automoc.cpp.o  -L/usr/local/lib/argos3 -largos3core_simulator -largos3plugin_simulator_eyebot -largos3plugin_simulator_genericrobot -Wl,-rpath,/usr/local/lib/argos3 

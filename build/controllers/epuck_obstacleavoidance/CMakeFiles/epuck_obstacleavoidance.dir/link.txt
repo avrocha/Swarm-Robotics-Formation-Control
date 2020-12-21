@@ -1,1 +1,0 @@
-/usr/bin/c++  -fPIC -g  -shared  -o libepuck_obstacleavoidance.so CMakeFiles/epuck_obstacleavoidance.dir/epuck_obstacleavoidance.cpp.o CMakeFiles/epuck_obstacleavoidance.dir/epuck_obstacleavoidance_automoc.cpp.o  -L/usr/local/lib/argos3 -largos3core_simulator -largos3plugin_simulator_epuck -largos3plugin_simulator_genericrobot -Wl,-rpath,/usr/local/lib/argos3 

@@ -1,1 +1,0 @@
-/usr/bin/c++  -fPIC -g  -shared  -o libeyebot_circle.so CMakeFiles/eyebot_circle.dir/eyebot_circle.cpp.o CMakeFiles/eyebot_circle.dir/footbot_circle.cpp.o CMakeFiles/eyebot_circle.dir/eyebot_circle_automoc.cpp.o  -L/usr/local/lib/argos3 -largos3core_simulator -largos3plugin_simulator_eyebot -largos3plugin_simulator_genericrobot -Wl,-rpath,/usr/local/lib/argos3 
