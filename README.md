@@ -1,6 +1,10 @@
 # Swarm-Robotics-Formation-Control
 ROBO@FEUP Final Assignment
 
+# Requirements
+- argos3 simulator
+- (...) WIP
+
 # Clone
 ```shell
 $ cd argos3/src/
