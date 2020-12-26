@@ -94,6 +94,9 @@ void CFootBotTX::Init(TConfigurationNode& t_node) {
       THROW_ARGOSEXCEPTION_NESTED("Error parsing the controller parameters.", ex);
    }
 
+   //Turn on red LED
+   m_leds->SetSingleColor(12, CColor::RED);
+
 
 }
 
@@ -103,6 +106,7 @@ void CFootBotTX::Init(TConfigurationNode& t_node) {
 void CFootBotTX::Reset() {
    //Reset communications
    m_pcTx->ClearData();
+   m_leds->SetSingleColor(12, CColor::RED);
 }
 
 /****************************************/
@@ -110,12 +114,9 @@ void CFootBotTX::Reset() {
 
 void CFootBotTX::ControlStep() {
    
+   TransmitPosition();
    SetWheelSpeedsFromVector(VectorToLight());
-   const CCI_PositioningSensor::SReading& pos = m_pos->GetReading();
-   // Set's its transmitting data buffer with its current position  (first 2 bytes)
-   m_pcTx->SetData(0,pos.Position[0]);
-   m_pcTx->SetData(1,pos.Position[1]);
-
+   
 
    //argos::LOG << "teste tx" << std::endl;
    
@@ -162,6 +163,30 @@ void CFootBotTX::ControlStep() {
 /****************************************/
 /****************************************/
 
+void CFootBotTX::TransmitPosition(){
+
+   const CCI_PositioningSensor::SReading& pos = m_pos->GetReading();
+  
+   int aux;
+   aux = (int) 1000*pos.Position[0];
+   m_pcTx->SetData(0,aux/1000);
+   aux = aux - 1000*(aux/1000);
+   m_pcTx->SetData(1,aux/100);
+   aux = aux - 100*(aux/100);
+   m_pcTx->SetData(2,aux/10);
+
+   aux = (int) 1000*pos.Position[1];
+   m_pcTx->SetData(3,aux/1000);
+   aux = aux - 1000*(aux/1000);
+   m_pcTx->SetData(4,aux/100);
+   aux = aux - 100*(aux/100);
+   m_pcTx->SetData(5,aux/10);
+
+}
+
+/****************************************/
+/****************************************/
+
 CVector2 CFootBotTX::VectorToLight() {
    /* Get light readings */
    const CCI_FootBotLightSensor::TReadings& tReadings = m_pcLight->GetReadings();
@@ -173,7 +198,7 @@ CVector2 CFootBotTX::VectorToLight() {
    if(cAccum.Length() > 0.0f) {
       /* Make the vector long as 1/4 of the max speed */
       cAccum.Normalize();
-      cAccum *= 0.25f * m_sWheelTurningParams.MaxSpeed;
+      cAccum *= 0.25 * m_sWheelTurningParams.MaxSpeed;
    }
    return cAccum;
 }
