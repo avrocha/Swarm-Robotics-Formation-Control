@@ -34,7 +34,7 @@
         <wheel_turning hard_turn_angle_threshold="90"
                        soft_turn_angle_threshold="70"
                        no_turn_angle_threshold="10"
-                       max_speed="10" />
+                       max_speed="5" />
       </params> 
     </footbot_diffusion_tx_controller>
 
@@ -46,17 +46,19 @@
         <range_and_bearing implementation="default" />
       </actuators>
       <sensors>
-        <footbot_light     implementation="rot_z_only" show_rays="true" />
+        <footbot_light     implementation="rot_z_only" show_rays="false" />
         <footbot_proximity implementation="default" show_rays="true" />
         <positioning       implementation="default" />
-        <range_and_bearing implementation="medium" medium="rab" show_rays="true"/>
+        <range_and_bearing implementation="medium" medium="rab" show_rays="false"/>
+        <colored_blob_omnidirectional_camera implementation="rot_z_only" medium="leds" show_rays="true" />
       </sensors>
       <params> 
         <base alpha="7.5" delta="0.1" velocity="5"/>
         <wheel_turning hard_turn_angle_threshold="90"
                        soft_turn_angle_threshold="70"
                        no_turn_angle_threshold="10"
-                       max_speed="10" />
+                       max_speed="5" />
+        <follow distance="100" angle="90" />
       </params> 
     </footbot_diffusion_rx_controller>
 
@@ -104,13 +106,13 @@
         </foot-bot>
       </entity>
     </distribute> -->
-    <foot-bot id="fb_tx">
-      <body position="1,1,0" orientation="0,0,0" />
+    <foot-bot id="fb_tx" rab_range="50" >
+      <body position="2.5,1,0" orientation="0,0,0" />
       <controller config="txc"/>
     </foot-bot>
 
-    <foot-bot id="fb_rx">
-      <body position="2,1,0" orientation="0,0,0" />
+    <foot-bot id="fb_rx" rab_range="50" omnidirectional_camera_aperture="89" >
+      <body position="2,1.5,0" orientation="0,0,0" />
       <controller config="rxc"/>
     </foot-bot>
 
@@ -209,7 +211,12 @@
   <!-- * Visualization * -->
   <!-- ****************** -->
   <visualization>
-    <qt-opengl />
+    <qt-opengl>
+      <camera>
+        <placement idx="1" position="2,1,2" look_at="2,1,0" />
+      </camera>
+      
+    </qt-opengl>
   </visualization>
 
 </argos-configuration>
