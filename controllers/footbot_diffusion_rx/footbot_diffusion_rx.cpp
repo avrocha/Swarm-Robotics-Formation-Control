@@ -5,6 +5,22 @@
 /* 2D vector definition */
 #include <argos3/core/utility/math/vector2.h>
 
+
+void CFootBotDiffusion::FollowingParams::Init(TConfigurationNode& t_node) {
+   try {
+      
+      GetNodeAttribute(t_node, "distance", dist);
+      CDegrees angle;
+      GetNodeAttribute(t_node, "angle", angle);
+      ang = ToRadians(angle);
+
+   }
+   catch(CARGoSException& ex) {
+      THROW_ARGOSEXCEPTION_NESTED("Error initializing controller following parameters.", ex);
+   }
+}
+
+
 /****************************************/
 /****************************************/
 
@@ -29,6 +45,7 @@ void CFootBotDiffusion::SWheelTurningParams::Init(TConfigurationNode& t_node) {
 /****************************************/
 
 CFootBotDiffusion::CFootBotDiffusion() :
+   m_pcCamera(NULL),
    m_pcRx(NULL),
    m_pcTx(NULL),
    m_pcLight(NULL),  
@@ -74,6 +91,7 @@ void CFootBotDiffusion::Init(TConfigurationNode& t_node) {
    m_pos = GetSensor  <CCI_PositioningSensor                   >("positioning"); 
    m_pcTx      = GetActuator<CCI_RangeAndBearingActuator     >("range_and_bearing"    );
    m_pcRx      = GetSensor  <CCI_RangeAndBearingSensor       >("range_and_bearing"    );
+   m_pcCamera = GetSensor  <CCI_ColoredBlobOmnidirectionalCameraSensor>("colored_blob_omnidirectional_camera");
    /*
     * Parse the configuration file
     *
@@ -94,6 +112,16 @@ void CFootBotDiffusion::Init(TConfigurationNode& t_node) {
       THROW_ARGOSEXCEPTION_NESTED("Error parsing the controller parameters.", ex);
    }
 
+   //Init Following parameters
+   try {
+      m_FollowingParams.Init(GetNode(t_node, "follow"));
+   }
+   catch(CARGoSException& ex) {
+      THROW_ARGOSEXCEPTION_NESTED("Error parsing the controller parameters.", ex);
+   }
+
+   //camera enable
+   m_pcCamera->Enable();
 
 }
 
@@ -110,14 +138,59 @@ void CFootBotDiffusion::Reset() {
 
 void CFootBotDiffusion::ControlStep() {
    
-   const CCI_RangeAndBearingSensor::TReadings& tPackets = m_pcRx->GetReadings();
-   if (tPackets.size()){
-   // print the position of master node 
-   argos::LOG << tPackets[0].Data[0] << "//" << tPackets[0].Data[1] << std::endl;
+   CVector2 MasterPos = ReceiveMasterPosition();
+   CVector2 obj_robo = ReadProxSensor();
+
+   // calculate fixed following position vector // vd -> desired vector
+      CVector2 vd = CVector2(m_FollowingParams.dist/100,m_FollowingParams.ang);
+
+   // Check self position and orientation
+      const CCI_PositioningSensor::SReading& pos = m_pos->GetReading();
+  
+   // camerda readings
+      const CCI_ColoredBlobOmnidirectionalCameraSensor::SReadings& sReadings = m_pcCamera->GetReadings();
+      CVector2 vbuff = CFootBotDiffusion::VectorToRobot(sReadings); 
+
+   // calculate vector to robot // va -> actual vector  
+      CVector2 va = CVector2(MasterPos.GetX()-pos.Position[0] , MasterPos.GetY()-pos.Position[1]);
+   // Orientation related operations    
+      CRadians angle_aux;
+      CVector3 vec_aux;
+      pos.Orientation.ToAngleAxis(angle_aux,vec_aux);
+   //CVector2 va = CVector2(vbuff.Length() , (vec_aux[2]*angle_aux + vbuff.Angle()));
+
+   // calculate vector to following position // v = va-vd 
+      CVector2 v = CVector2(va.GetX()-vd.GetX() , va.GetY()-vd.GetY() );
+   //actuate 
+   /*if (v.Length()>0.01){
+      CFootBotDiffusion::SetWheelSpeedsFromVector(v,vec_aux[2]*angle_aux);
    }
+   else {
+      CFootBotDiffusion::SetWheelSpeedsFromVector(CVector2(0,0),vec_aux[2]*angle_aux);
+   }*/
+
+   obj_robo = ObjectRepulsion(obj_robo , vec_aux[2]*angle_aux);
+
+   // Para testar formação  -> Parâmetros no xml 
+   CFootBotDiffusion::SetWheelSpeedsFromVector(v,vec_aux[2]*angle_aux);
    
+   //Para testar obstacle avoidance
+   //CFootBotDiffusion::SetWheelSpeedsFromVector(CVector2(-1,0) + 1000*obj_robo ,vec_aux[2]*angle_aux);
+  
+
+   /*
+   argos::LOG << "X_Tx :  " << MasterPos.GetX() << std::endl;
+   argos::LOG << "Y_Tx :  " << MasterPos.GetY() << std::endl;
+   argos::LOG << "VD :  " << vd.GetX() << " // " << vd.GetY() << std::endl ;
+   argos::LOG << "VA :  " << va.GetX() << " // " << va.GetY() << std::endl ;
+   argos::LOG << "V  :  " << v.GetX() << "  //  " << v.GetY() << std::endl ;
+   //argos::LOG << "Orientation :  " << v.Angle() << std::endl;
+   argos::LOG << "      " << std::endl; */
+
+   argos::LOG << "obj_robo :  " << obj_robo.GetX() << " // " << obj_robo.GetY() << std::endl;
+
    
-   /* DIFFUSION DEFUALT CONTROLLER
+   /* DIFFUSION DEFAULT CONTROLLER
    int switch_var = 0;  
    // Get readings from proximity sensor 
    const CCI_FootBotProximitySensor::TReadings& tProxReads = m_pcProximity->GetReadings();
@@ -159,6 +232,22 @@ void CFootBotDiffusion::ControlStep() {
 /****************************************/
 /****************************************/
 
+CVector2 CFootBotDiffusion::ReceiveMasterPosition() {
+   Real X_Tx , Y_Tx;
+    // Receive info from TX 
+      const CCI_RangeAndBearingSensor::TReadings& tPackets = m_pcRx->GetReadings();
+      //Transform it 
+      X_Tx = tPackets[0].Data[0] + 0.1*tPackets[0].Data[1] + 0.01*tPackets[0].Data[2];
+      Y_Tx = tPackets[0].Data[3] + 0.1*tPackets[0].Data[4] + 0.01*tPackets[0].Data[5];
+
+   return CVector2(X_Tx,Y_Tx);
+
+}
+
+
+/****************************************/
+/****************************************/
+
 CVector2 CFootBotDiffusion::VectorToLight() {
    /* Get light readings */
    const CCI_FootBotLightSensor::TReadings& tReadings = m_pcLight->GetReadings();
@@ -178,35 +267,39 @@ CVector2 CFootBotDiffusion::VectorToLight() {
 /****************************************/
 /****************************************/
 
-void CFootBotDiffusion::SetWheelSpeedsFromVector(const CVector2& c_heading) {
+void CFootBotDiffusion::SetWheelSpeedsFromVector(const CVector2& c_heading , const CRadians orient) {
+   Real SpeedLim = 0;
    /* Get the heading angle */
    CRadians cHeadingAngle = c_heading.Angle().SignedNormalize();
+   CRadians diff = Abs(cHeadingAngle-orient);
    /* Get the length of the heading vector */
    Real fHeadingLength = c_heading.Length();
+   //if (fHeadingLength < 5) {diff = CRadians(0);}
    /* Clamp the speed so that it's not greater than MaxSpeed */
-   Real fBaseAngularWheelSpeed = Min<Real>(fHeadingLength, m_sWheelTurningParams.MaxSpeed);
+   Real fBaseAngularWheelSpeed = Max<Real>(fHeadingLength, m_sWheelTurningParams.MaxSpeed);
    /* State transition logic */
    if(m_sWheelTurningParams.TurningMechanism == SWheelTurningParams::HARD_TURN) {
-      if(Abs(cHeadingAngle) <= m_sWheelTurningParams.SoftTurnOnAngleThreshold) {
+      if(diff <= m_sWheelTurningParams.SoftTurnOnAngleThreshold) {
          m_sWheelTurningParams.TurningMechanism = SWheelTurningParams::SOFT_TURN;
       }
    }
    if(m_sWheelTurningParams.TurningMechanism == SWheelTurningParams::SOFT_TURN) {
-      if(Abs(cHeadingAngle) > m_sWheelTurningParams.HardTurnOnAngleThreshold) {
+      if(diff > m_sWheelTurningParams.HardTurnOnAngleThreshold) {
          m_sWheelTurningParams.TurningMechanism = SWheelTurningParams::HARD_TURN;
       }
-      else if(Abs(cHeadingAngle) <= m_sWheelTurningParams.NoTurnAngleThreshold) {
+      else if(diff <= m_sWheelTurningParams.NoTurnAngleThreshold) {
          m_sWheelTurningParams.TurningMechanism = SWheelTurningParams::NO_TURN;
       }
    }
    if(m_sWheelTurningParams.TurningMechanism == SWheelTurningParams::NO_TURN) {
-      if(Abs(cHeadingAngle) > m_sWheelTurningParams.HardTurnOnAngleThreshold) {
+      if(diff > m_sWheelTurningParams.HardTurnOnAngleThreshold) {
          m_sWheelTurningParams.TurningMechanism = SWheelTurningParams::HARD_TURN;
       }
-      else if(Abs(cHeadingAngle) > m_sWheelTurningParams.NoTurnAngleThreshold) {
+      else if(diff > m_sWheelTurningParams.NoTurnAngleThreshold) {
          m_sWheelTurningParams.TurningMechanism = SWheelTurningParams::SOFT_TURN;
       }
    }
+
    /* Wheel speeds based on current turning state */
    Real fSpeed1, fSpeed2;
    switch(m_sWheelTurningParams.TurningMechanism) {
@@ -218,15 +311,21 @@ void CFootBotDiffusion::SetWheelSpeedsFromVector(const CVector2& c_heading) {
       }
       case SWheelTurningParams::SOFT_TURN: {
          /* Both wheels go straight, but one is faster than the other */
-         Real fSpeedFactor = (m_sWheelTurningParams.HardTurnOnAngleThreshold - Abs(cHeadingAngle)) / m_sWheelTurningParams.HardTurnOnAngleThreshold;
+         Real fSpeedFactor = (m_sWheelTurningParams.HardTurnOnAngleThreshold - diff) / m_sWheelTurningParams.HardTurnOnAngleThreshold;
          fSpeed1 = fBaseAngularWheelSpeed - fBaseAngularWheelSpeed * (1.0 - fSpeedFactor);
          fSpeed2 = fBaseAngularWheelSpeed + fBaseAngularWheelSpeed * (1.0 - fSpeedFactor);
          break;
       }
       case SWheelTurningParams::HARD_TURN: {
          /* Opposite wheel speeds */
-         fSpeed1 = -m_sWheelTurningParams.MaxSpeed;
-         fSpeed2 =  m_sWheelTurningParams.MaxSpeed;
+         if (c_heading.Length()<0) {
+            SpeedLim  = m_sWheelTurningParams.MaxSpeed * 0.05;
+         }
+         else {
+            SpeedLim  = m_sWheelTurningParams.MaxSpeed ;
+         }
+         fSpeed1 = -SpeedLim;
+         fSpeed2 =  SpeedLim;
          break;
       }
    }
@@ -243,7 +342,71 @@ void CFootBotDiffusion::SetWheelSpeedsFromVector(const CVector2& c_heading) {
       fRightWheelSpeed = fSpeed1;
    }
    /* Finally, set the wheel speeds */
+   LOG <<"Turn : " << m_sWheelTurningParams.TurningMechanism << std::endl;
    m_pcWheels->SetLinearVelocity(fLeftWheelSpeed, fRightWheelSpeed);
+}
+
+/****************************************/
+/****************************************/
+
+CVector2 CFootBotDiffusion::VectorToRobot(const CCI_ColoredBlobOmnidirectionalCameraSensor::SReadings& sReadings) {
+   
+   /* Go through the camera readings to calculate the vector */
+   if(! sReadings.BlobList.empty()) {
+      CVector2 out;
+      size_t BlobsSeen = 0;
+
+      for(size_t i = 0; i < sReadings.BlobList.size(); ++i) {
+
+         if(sReadings.BlobList[i]->Color == CColor::RED) {
+            
+            out = CVector2(sReadings.BlobList[i]->Distance , sReadings.BlobList[i]-> Angle);
+            BlobsSeen++;
+         }
+      }
+      if(BlobsSeen > 0) {
+         // Clamp the length of the vector to the max speed 
+         /*if(out.Length() > m_sWheelTurningParams.MaxSpeed) {
+            out.Normalize();
+            out *= m_sWheelTurningParams.MaxSpeed;
+         }*/
+         argos::LOG << "1" << std::endl;
+         return out;
+      }
+      else
+         argos::LOG << "2" << std::endl;
+         return CVector2();
+   }
+   else {
+      argos::LOG << "3" << std::endl;
+      return CVector2();
+   }
+}
+
+/****************************************/
+/****************************************/
+
+CVector2 CFootBotDiffusion::ReadProxSensor() {
+   /* Get readings from proximity sensor */
+   const CCI_FootBotProximitySensor::TReadings& tProxReads = m_pcProximity->GetReadings();
+   /* Sum them together */
+   CVector2 cAccumulator;
+   for(size_t i = 0; i < tProxReads.size(); ++i) {
+      cAccumulator += CVector2(tProxReads[i].Value, tProxReads[i].Angle);
+      //argos::LOG << tProxReads[i].Value<<"----"<<tProxReads[i].Angle<< std::endl;
+   }
+   cAccumulator /= tProxReads.size();
+   
+   return cAccumulator;
+   
+  
+}
+
+CVector2 CFootBotDiffusion::ObjectRepulsion(const CVector2 obstacle  , const CRadians orient) {
+   CDegrees inv = CDegrees(180);
+   CRadians aux = obstacle.Angle() + orient ;
+   CVector2 out = CVector2(obstacle.Length() , aux + ToRadians(inv));
+   return out;
 }
 
 
