@@ -42,6 +42,9 @@
 #include <argos3/plugins/robots/generic/control_interface/ci_range_and_bearing_actuator.h>
 /* Definition of the range and bearing sensor */
 #include <argos3/plugins/robots/generic/control_interface/ci_range_and_bearing_sensor.h>
+/* Definition of the omnidirectional camera sensor */
+#include <argos3/plugins/robots/generic/control_interface/ci_colored_blob_omnidirectional_camera_sensor.h>
+
 
 /*
  * All the ARGoS stuff in the 'argos' namespace.
@@ -57,6 +60,13 @@ class CFootBotDiffusion : public CCI_Controller {
 public:
 
 
+   struct FollowingParams {
+      Real dist;
+      CRadians ang;
+
+      void Init(TConfigurationNode& t_tree);
+   };
+   
    struct SWheelTurningParams {
       /*
        * The turning mechanism.
@@ -64,9 +74,9 @@ public:
        */
       enum ETurningMechanism
       {
-         NO_TURN = 0, // go straight
-         SOFT_TURN,   // both wheels are turning forwards, but at different speeds
-         HARD_TURN    // wheels are turning with opposite speeds
+         NO_TURN = 0,  // go straight
+         SOFT_TURN,    // both wheels are turning forwards, but at different speeds
+         HARD_TURN,    // wheels are turning with opposite speeds
       } TurningMechanism;
       /*
        * Angular thresholds to change turning state.
@@ -117,6 +127,12 @@ public:
     */
    virtual void Destroy() {}
 
+   virtual CVector2 ReceiveMasterPosition();
+
+   virtual CVector2 ReadProxSensor();
+
+   virtual CVector2 ObjectRepulsion(const CVector2 obstacle  , const CRadians orient);
+
 protected:
    
    /*
@@ -126,7 +142,10 @@ protected:
    /*
     * Gets a direction vector as input and transforms it into wheel actuation.
     */
-   void SetWheelSpeedsFromVector(const CVector2& c_heading);
+   void SetWheelSpeedsFromVector(const CVector2& c_heading , const CRadians orient);
+   
+   // Returns a vector pointing towards a red light blob given a camera input
+   CVector2 VectorToRobot(const CCI_ColoredBlobOmnidirectionalCameraSensor::SReadings& sReadings);
 
 
 private:
@@ -145,6 +164,8 @@ private:
    CCI_RangeAndBearingActuator*  m_pcTx;
    // Pointer to the range and bearing sensor 
    CCI_RangeAndBearingSensor* m_pcRx;
+   /* Pointer to the omnidirectional camera sensor */
+   CCI_ColoredBlobOmnidirectionalCameraSensor* m_pcCamera;
 
    /*
     * The following variables are used as parameters for the
@@ -172,6 +193,9 @@ private:
 
    /* The turning parameters. */
    SWheelTurningParams m_sWheelTurningParams;
+
+   // The following parameters 
+   FollowingParams m_FollowingParams;
 
 
 };
