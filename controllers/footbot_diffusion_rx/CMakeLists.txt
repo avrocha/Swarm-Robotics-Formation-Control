@@ -1,4 +1,5 @@
 add_library(footbot_diffusion_rx MODULE footbot_diffusion_rx.h footbot_diffusion_rx.cpp)
+
 target_link_libraries(footbot_diffusion_rx
   argos3core_simulator
   argos3plugin_simulator_footbot

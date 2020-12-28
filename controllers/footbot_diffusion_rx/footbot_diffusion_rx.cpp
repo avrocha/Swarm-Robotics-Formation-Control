@@ -5,420 +5,341 @@
 /* 2D vector definition */
 #include <argos3/core/utility/math/vector2.h>
 
+/* STL string library*/
+#include <sstream>
+#include <string>
 
-void CFootBotDiffusion::FollowingParams::Init(TConfigurationNode& t_node) {
-   try {
-      
-      GetNodeAttribute(t_node, "distance", dist);
-      CDegrees angle;
-      GetNodeAttribute(t_node, "angle", angle);
-      ang = ToRadians(angle);
-
-   }
-   catch(CARGoSException& ex) {
-      THROW_ARGOSEXCEPTION_NESTED("Error initializing controller following parameters.", ex);
-   }
+void CFootBotRX::SWheelTurningParams::Init(TConfigurationNode& t_node)
+{
+    try
+    {
+        TurningMechanism = NO_TURN;
+        CDegrees cAngle;
+        GetNodeAttribute(t_node, "hard_turn_angle_threshold", cAngle);
+        HardTurnOnAngleThreshold = ToRadians(cAngle);
+        GetNodeAttribute(t_node, "soft_turn_angle_threshold", cAngle);
+        SoftTurnOnAngleThreshold = ToRadians(cAngle);
+        GetNodeAttribute(t_node, "no_turn_angle_threshold", cAngle);
+        NoTurnAngleThreshold = ToRadians(cAngle);
+        GetNodeAttribute(t_node, "max_speed", MaxSpeed);
+    }
+    catch(CARGoSException& ex)
+    {
+        THROW_ARGOSEXCEPTION_NESTED("Error initializing controller wheel turning parameters.", ex);
+    }
 }
 
+CFootBotRX::CFootBotRX()
+    : m_pcCamera(NULL),
+      m_pcRx(NULL),
+      m_pcTx(NULL),
+      m_pcLight(NULL),
+      m_leds(NULL),
+      m_pcWheels(NULL),
+      m_pcProximity(NULL),
+      m_cAlpha(10.0f),
+      m_fDelta(0.5f),
+      m_fWheelVelocity(2.5f),
+      m_cGoStraightAngleRange(-ToRadians(m_cAlpha), ToRadians(m_cAlpha)),
+      kAvoidObstacle(2.5),
+      kFollowLight(0.06),
+      kMantainFormation(0.5),
+      light(),
+      deduced_light(),
+      angle_var_ref(ToRadians(CDegrees(0))),
+      id_detected(0)
+{}
 
-/****************************************/
-/****************************************/
+void CFootBotRX::Init(TConfigurationNode& t_node)
+{
+    m_leds = GetActuator<CCI_LEDsActuator>("leds");
+    m_pcLight = GetSensor<CCI_FootBotLightSensor>("footbot_light");
+    m_pcWheels = GetActuator<CCI_DifferentialSteeringActuator>("differential_steering");
+    m_pcProximity = GetSensor<CCI_FootBotProximitySensor>("footbot_proximity");
+    m_pos = GetSensor<CCI_PositioningSensor>("positioning");
+    m_pcTx = GetActuator<CCI_RangeAndBearingActuator>("range_and_bearing");
+    m_pcRx = GetSensor<CCI_RangeAndBearingSensor>("range_and_bearing");
+    m_pcCamera = GetSensor<CCI_ColoredBlobOmnidirectionalCameraSensor>("colored_blob_omnidirectional_camera");
 
-void CFootBotDiffusion::SWheelTurningParams::Init(TConfigurationNode& t_node) {
-   try {
-      TurningMechanism = NO_TURN;
-      CDegrees cAngle;
-      GetNodeAttribute(t_node, "hard_turn_angle_threshold", cAngle);
-      HardTurnOnAngleThreshold = ToRadians(cAngle);
-      GetNodeAttribute(t_node, "soft_turn_angle_threshold", cAngle);
-      SoftTurnOnAngleThreshold = ToRadians(cAngle);
-      GetNodeAttribute(t_node, "no_turn_angle_threshold", cAngle);
-      NoTurnAngleThreshold = ToRadians(cAngle);
-      GetNodeAttribute(t_node, "max_speed", MaxSpeed);
-   }
-   catch(CARGoSException& ex) {
-      THROW_ARGOSEXCEPTION_NESTED("Error initializing controller wheel turning parameters.", ex);
-   }
+    /* Parse the configuration file */
+    GetNodeAttributeOrDefault(GetNode(t_node, "base"), "alpha", m_cAlpha, m_cAlpha);
+    m_cGoStraightAngleRange.Set(-ToRadians(m_cAlpha), ToRadians(m_cAlpha));
+    GetNodeAttributeOrDefault(GetNode(t_node, "base"), "delta", m_fDelta, m_fDelta);
+    GetNodeAttributeOrDefault(GetNode(t_node, "base"), "velocity", m_fWheelVelocity, m_fWheelVelocity);
+
+    // Init sWheelTurning parameters
+    try
+    {
+        m_sWheelTurningParams.Init(GetNode(t_node, "wheel_turning"));
+    }
+    catch(CARGoSException& ex)
+    {
+        THROW_ARGOSEXCEPTION_NESTED("Error parsing the controller parameters.", ex);
+    }
 }
 
-/****************************************/
-/****************************************/
+void CFootBotRX::Reset() { m_pcTx->ClearData(); }
 
-CFootBotDiffusion::CFootBotDiffusion() :
-   m_pcCamera(NULL),
-   m_pcRx(NULL),
-   m_pcTx(NULL),
-   m_pcLight(NULL),  
-   m_leds(NULL),
-   m_pcWheels(NULL),
-   m_pcProximity(NULL),
-   m_cAlpha(10.0f),
-   m_fDelta(0.5f),
-   m_fWheelVelocity(2.5f),
-   m_cGoStraightAngleRange(-ToRadians(m_cAlpha),
-                           ToRadians(m_cAlpha)) {}
+void CFootBotRX::ControlStep()
+{
+    if(!id_detected)
+    {
+        AcquirePosition();
+    }
+    else
+    {
+        // master position in global coordinates
+        const CVector2 masterPos = ReceiveMasterPosition();
 
-/****************************************/
-/****************************************/
+        // check self position and orientation, in global coordinates
+        const CCI_PositioningSensor::SReading& pos = m_pos->GetReading();
 
-void CFootBotDiffusion::Init(TConfigurationNode& t_node) {
-   /*
-    * Get sensor/actuator handles
-    *
-    * The passed string (ex. "differential_steering") corresponds to the
-    * XML tag of the device whose handle we want to have. For a list of
-    * allowed values, type at the command prompt:
-    *
-    * $ argos3 -q actuators
-    *
-    * to have a list of all the possible actuators, or
-    *
-    * $ argos3 -q sensors
-    *
-    * to have a list of all the possible sensors.
-    *
-    * NOTE: ARGoS creates and initializes actuators and sensors
-    * internally, on the basis of the lists provided the configuration
-    * file at the <controllers><footbot_diffusion><actuators> and
-    * <controllers><footbot_diffusion><sensors> sections. If you forgot to
-    * list a device in the XML and then you request it here, an error
-    * occurs.
-    */
-   m_leds = GetActuator<CCI_LEDsActuator                       >("leds"); 
-   m_pcLight  = GetSensor  <CCI_FootBotLightSensor             >("footbot_light");
-   m_pcWheels    = GetActuator<CCI_DifferentialSteeringActuator>("differential_steering");
-   m_pcProximity = GetSensor  <CCI_FootBotProximitySensor      >("footbot_proximity"    );
-   m_pos = GetSensor  <CCI_PositioningSensor                   >("positioning"); 
-   m_pcTx      = GetActuator<CCI_RangeAndBearingActuator     >("range_and_bearing"    );
-   m_pcRx      = GetSensor  <CCI_RangeAndBearingSensor       >("range_and_bearing"    );
-   m_pcCamera = GetSensor  <CCI_ColoredBlobOmnidirectionalCameraSensor>("colored_blob_omnidirectional_camera");
-   /*
-    * Parse the configuration file
-    *
-    * The user defines this part. Here, the algorithm accepts three
-    * parameters and it's nice to put them in the config file so we don't
-    * have to recompile if we want to try other settings.
-    */
-   GetNodeAttributeOrDefault(GetNode(t_node, "base"), "alpha", m_cAlpha, m_cAlpha);
-   m_cGoStraightAngleRange.Set(-ToRadians(m_cAlpha), ToRadians(m_cAlpha));
-   GetNodeAttributeOrDefault(GetNode(t_node, "base"), "delta", m_fDelta, m_fDelta);
-   GetNodeAttributeOrDefault(GetNode(t_node, "base"), "velocity", m_fWheelVelocity, m_fWheelVelocity);
+        /* Caculate Formation Control vector */
 
-   //Init sWheelTurning parameters
-   try {
-      m_sWheelTurningParams.Init(GetNode(t_node, "wheel_turning"));
-   }
-   catch(CARGoSException& ex) {
-      THROW_ARGOSEXCEPTION_NESTED("Error parsing the controller parameters.", ex);
-   }
+        // calculate fixed following position vector, in local coordinates
+        CVector2 desired = CVector2(m_FollowingParams.dist / 100, m_FollowingParams.ang);
 
-   //Init Following parameters
-   try {
-      m_FollowingParams.Init(GetNode(t_node, "follow"));
-   }
-   catch(CARGoSException& ex) {
-      THROW_ARGOSEXCEPTION_NESTED("Error parsing the controller parameters.", ex);
-   }
+        // calculate vector to master from its actual position, in local coordinates
+        CVector2 actual = CVector2(masterPos.GetX() - pos.Position[0], masterPos.GetY() - pos.Position[1]);
 
-   //camera enable
-   m_pcCamera->Enable();
+        // calculate vector to following position, in local coordinates
+        CVector2 goToFormation = CVector2(actual.GetX() - desired.GetX(), actual.GetY() - desired.GetY());
 
+        CRadians angle_aux;
+        CVector3 vec_aux;
+        pos.Orientation.ToAngleAxis(angle_aux, vec_aux);
+
+        goToFormation = CVector2(goToFormation.Length(), goToFormation.Angle() - vec_aux[2] * angle_aux);
+
+        /* Detect objects and create an object repulsion vector */
+
+        // object position in local coordinates
+        CVector2 objectPos = ReadProxSensor();
+
+        // obstacle inverse vector, in local coordinates
+        // CVector2 objectRep = ObjectRepulsion(objectPos, vec_aux[2] * angle_aux);
+        CVector2 objectRep = ObjectRepulsion(objectPos, CRadians(0));
+
+        /* Calculate light vector, if unseen use last known coordinates, adjusted to new orientation */
+
+        if(VectorToLight().Length() != 0)
+        {
+            light = VectorToLight();
+            light_mode = 0;
+            angle_var_ref = vec_aux[2] * angle_aux;
+        }
+        else
+        {
+            deduced_light = CVector2(light.Length(), light.Angle() + (angle_var_ref - vec_aux[2] * angle_aux));
+            light_mode = 1;
+        }
+
+        // resultant vector
+        auto res = goToFormation * kMantainFormation + objectRep * kAvoidObstacle +
+                   (1 - light_mode) * light * kFollowLight + light_mode * deduced_light * kFollowLight;
+
+        if(objectRep.Length() == 0)
+            res *= 0.38 * m_sWheelTurningParams.MaxSpeed;
+        else
+            res *= 0.08 * m_sWheelTurningParams.MaxSpeed;
+
+        // resultant actuation from sum of vectors
+        SetWheelSpeedsFromVector(res);
+
+        // debug - temp
+        argos::LOG << "SLAVE:" << std::endl;
+        argos::LOG << "f_ctrl:  " << goToFormation.Length() << " | " << ToDegrees(goToFormation.Angle()) << std::endl;
+        argos::LOG << "obj_rep: " << objectRep.Length() << "|" << ToDegrees(objectRep.Angle()) << std::endl;
+        argos::LOG << "light:   " << light.Length() << "|" << ToDegrees(light.Angle()) << std::endl;
+        argos::LOG << "d_light: " << deduced_light.Length() << "|" << ToDegrees(deduced_light.Angle()) << std::endl;
+        argos::LOG << "res:     " << res.Length() << "|" << ToDegrees(res.Angle()) << std::endl;
+        argos::LOG << "res2:    " << res.Length() << "|" << ToDegrees(res.Angle() - vec_aux[2] * angle_aux)
+                   << std::endl;
+    }
 }
 
-/****************************************/
-/****************************************/
+void CFootBotRX::AcquirePosition()
+{
+    Real ID_Tx, distance_Tx, angle_Tx;
 
-void CFootBotDiffusion::Reset() {
-   //Reset communications
-   m_pcTx->ClearData();
+    const CCI_RangeAndBearingSensor::TReadings& tPackets = m_pcRx->GetReadings();
+
+    std::stringstream id_s(GetId());
+    int id;
+    id_s >> id;
+
+    if(id == tPackets[0].Data[0])
+    {
+        m_FollowingParams.dist =
+            1000 * tPackets[0].Data[1] + 100 * tPackets[0].Data[2] + 10 * tPackets[0].Data[3] + 1 * tPackets[0].Data[4];
+        m_FollowingParams.ang = ToRadians(CDegrees(1000 * tPackets[0].Data[5] + 100 * tPackets[0].Data[6] +
+                                                   10 * tPackets[0].Data[7] + 1 * tPackets[0].Data[8]));
+
+        argos::LOG << "Slave " << id << " position decoded: " << m_FollowingParams.dist << "|"
+                   << ToDegrees(m_FollowingParams.ang) << std::endl;
+        id_detected = 1;
+    }
 }
 
-/****************************************/
-/****************************************/
+CVector2 CFootBotRX::ReceiveMasterPosition()
+{
+    Real x, y;
+    // Receive info from TX
+    const CCI_RangeAndBearingSensor::TReadings& tPackets = m_pcRx->GetReadings();
+    // Transform it
+    x = tPackets[0].Data[0] + 0.1 * tPackets[0].Data[1] + 0.01 * tPackets[0].Data[2];
+    y = tPackets[0].Data[3] + 0.1 * tPackets[0].Data[4] + 0.01 * tPackets[0].Data[5];
 
-void CFootBotDiffusion::ControlStep() {
-   
-   CVector2 MasterPos = ReceiveMasterPosition();
-   CVector2 obj_robo = ReadProxSensor();
-
-   // calculate fixed following position vector // vd -> desired vector
-      CVector2 vd = CVector2(m_FollowingParams.dist/100,m_FollowingParams.ang);
-
-   // Check self position and orientation
-      const CCI_PositioningSensor::SReading& pos = m_pos->GetReading();
-  
-   // camerda readings
-      const CCI_ColoredBlobOmnidirectionalCameraSensor::SReadings& sReadings = m_pcCamera->GetReadings();
-      CVector2 vbuff = CFootBotDiffusion::VectorToRobot(sReadings); 
-
-   // calculate vector to robot // va -> actual vector  
-      CVector2 va = CVector2(MasterPos.GetX()-pos.Position[0] , MasterPos.GetY()-pos.Position[1]);
-   // Orientation related operations    
-      CRadians angle_aux;
-      CVector3 vec_aux;
-      pos.Orientation.ToAngleAxis(angle_aux,vec_aux);
-   //CVector2 va = CVector2(vbuff.Length() , (vec_aux[2]*angle_aux + vbuff.Angle()));
-
-   // calculate vector to following position // v = va-vd 
-      CVector2 v = CVector2(va.GetX()-vd.GetX() , va.GetY()-vd.GetY() );
-   //actuate 
-   /*if (v.Length()>0.01){
-      CFootBotDiffusion::SetWheelSpeedsFromVector(v,vec_aux[2]*angle_aux);
-   }
-   else {
-      CFootBotDiffusion::SetWheelSpeedsFromVector(CVector2(0,0),vec_aux[2]*angle_aux);
-   }*/
-
-   obj_robo = ObjectRepulsion(obj_robo , vec_aux[2]*angle_aux);
-
-   // Para testar formação  -> Parâmetros no xml 
-   CFootBotDiffusion::SetWheelSpeedsFromVector(v,vec_aux[2]*angle_aux);
-   
-   //Para testar obstacle avoidance
-   //CFootBotDiffusion::SetWheelSpeedsFromVector(CVector2(-1,0) + 1000*obj_robo ,vec_aux[2]*angle_aux);
-  
-
-   /*
-   argos::LOG << "X_Tx :  " << MasterPos.GetX() << std::endl;
-   argos::LOG << "Y_Tx :  " << MasterPos.GetY() << std::endl;
-   argos::LOG << "VD :  " << vd.GetX() << " // " << vd.GetY() << std::endl ;
-   argos::LOG << "VA :  " << va.GetX() << " // " << va.GetY() << std::endl ;
-   argos::LOG << "V  :  " << v.GetX() << "  //  " << v.GetY() << std::endl ;
-   //argos::LOG << "Orientation :  " << v.Angle() << std::endl;
-   argos::LOG << "      " << std::endl; */
-
-   argos::LOG << "obj_robo :  " << obj_robo.GetX() << " // " << obj_robo.GetY() << std::endl;
-
-   
-   /* DIFFUSION DEFAULT CONTROLLER
-   int switch_var = 0;  
-   // Get readings from proximity sensor 
-   const CCI_FootBotProximitySensor::TReadings& tProxReads = m_pcProximity->GetReadings();
-   // Sum them together 
-   CVector2 cAccumulator;
-   for(size_t i = 0; i < tProxReads.size(); ++i) {
-      cAccumulator += CVector2(tProxReads[i].Value, tProxReads[i].Angle);
-   }
-   cAccumulator /= tProxReads.size();
-   // If the angle of the vector is small enough and the closest obstacle
-   // is far enough, continue going straight, otherwise curve a little
-   CRadians cAngle = cAccumulator.Angle();
-   if(m_cGoStraightAngleRange.WithinMinBoundIncludedMaxBoundIncluded(cAngle) &&
-      cAccumulator.Length() < m_fDelta ) {
-      // Go straight 
-      m_pcWheels->SetLinearVelocity(m_fWheelVelocity, m_fWheelVelocity);
-   }
-   else {
-      // switch LEDs color 
-      if (switch_var){
-         m_leds->SetAllColors(CColor::RED);
-         switch_var = 0;
-      }
-      else {
-         m_leds->SetAllColors(CColor::RED);
-         switch_var = 1;
-      }
-      // Turn, depending on the sign of the angle 
-      if(cAngle.GetValue() > 0.0f) {
-         m_pcWheels->SetLinearVelocity(m_fWheelVelocity, 0.0f);
-      }
-      else {
-         m_pcWheels->SetLinearVelocity(0.0f, m_fWheelVelocity);
-      }
-   } */
-   
+    return CVector2(x, y);
 }
 
-/****************************************/
-/****************************************/
+CVector2 CFootBotRX::VectorToLight()
+{
+    /* Get light readings */
+    const CCI_FootBotLightSensor::TReadings& tReadings = m_pcLight->GetReadings();
 
-CVector2 CFootBotDiffusion::ReceiveMasterPosition() {
-   Real X_Tx , Y_Tx;
-    // Receive info from TX 
-      const CCI_RangeAndBearingSensor::TReadings& tPackets = m_pcRx->GetReadings();
-      //Transform it 
-      X_Tx = tPackets[0].Data[0] + 0.1*tPackets[0].Data[1] + 0.01*tPackets[0].Data[2];
-      Y_Tx = tPackets[0].Data[3] + 0.1*tPackets[0].Data[4] + 0.01*tPackets[0].Data[5];
+    /* Calculate a normalized vector that points to the closest light */
+    CVector2 cAccum;
 
-   return CVector2(X_Tx,Y_Tx);
-
+    for(size_t i = 0; i < tReadings.size(); ++i)
+    {
+        cAccum += CVector2(tReadings[i].Value, tReadings[i].Angle);
+    }
+    if(cAccum.Length() > 0.0f)
+    {
+        cAccum.Normalize();
+    }
+    return cAccum;
 }
 
+CVector2 CFootBotRX::ReadProxSensor()
+{
+    const CCI_FootBotProximitySensor::TReadings& tProxReads = m_pcProximity->GetReadings();
 
-/****************************************/
-/****************************************/
+    /* Sum them together */
+    CVector2 cAccumulator;
 
-CVector2 CFootBotDiffusion::VectorToLight() {
-   /* Get light readings */
-   const CCI_FootBotLightSensor::TReadings& tReadings = m_pcLight->GetReadings();
-   /* Calculate a normalized vector that points to the closest light */
-   CVector2 cAccum;
-   for(size_t i = 0; i < tReadings.size(); ++i) {
-      cAccum += CVector2(tReadings[i].Value, tReadings[i].Angle);
-   }
-   if(cAccum.Length() > 0.0f) {
-      /* Make the vector long as 1/4 of the max speed */
-      cAccum.Normalize();
-      cAccum *= 0.25f * m_sWheelTurningParams.MaxSpeed;
-   }
-   return cAccum;
+    for(auto reading : tProxReads)
+    {
+        cAccumulator += CVector2(reading.Value, reading.Angle);
+    }
+
+    cAccumulator /= tProxReads.size();
+
+    return cAccumulator;
 }
 
-/****************************************/
-/****************************************/
+CVector2 CFootBotRX::ObjectRepulsion(const CVector2 obstacle, const CRadians orient)
+{
+    CRadians aux = obstacle.Angle() + orient;
 
-void CFootBotDiffusion::SetWheelSpeedsFromVector(const CVector2& c_heading , const CRadians orient) {
-   Real SpeedLim = 0;
-   /* Get the heading angle */
-   CRadians cHeadingAngle = c_heading.Angle().SignedNormalize();
-   CRadians diff = Abs(cHeadingAngle-orient);
-   /* Get the length of the heading vector */
-   Real fHeadingLength = c_heading.Length();
-   //if (fHeadingLength < 5) {diff = CRadians(0);}
-   /* Clamp the speed so that it's not greater than MaxSpeed */
-   Real fBaseAngularWheelSpeed = Max<Real>(fHeadingLength, m_sWheelTurningParams.MaxSpeed);
-   /* State transition logic */
-   if(m_sWheelTurningParams.TurningMechanism == SWheelTurningParams::HARD_TURN) {
-      if(diff <= m_sWheelTurningParams.SoftTurnOnAngleThreshold) {
-         m_sWheelTurningParams.TurningMechanism = SWheelTurningParams::SOFT_TURN;
-      }
-   }
-   if(m_sWheelTurningParams.TurningMechanism == SWheelTurningParams::SOFT_TURN) {
-      if(diff > m_sWheelTurningParams.HardTurnOnAngleThreshold) {
-         m_sWheelTurningParams.TurningMechanism = SWheelTurningParams::HARD_TURN;
-      }
-      else if(diff <= m_sWheelTurningParams.NoTurnAngleThreshold) {
-         m_sWheelTurningParams.TurningMechanism = SWheelTurningParams::NO_TURN;
-      }
-   }
-   if(m_sWheelTurningParams.TurningMechanism == SWheelTurningParams::NO_TURN) {
-      if(diff > m_sWheelTurningParams.HardTurnOnAngleThreshold) {
-         m_sWheelTurningParams.TurningMechanism = SWheelTurningParams::HARD_TURN;
-      }
-      else if(diff > m_sWheelTurningParams.NoTurnAngleThreshold) {
-         m_sWheelTurningParams.TurningMechanism = SWheelTurningParams::SOFT_TURN;
-      }
-   }
+    // aux tolerance to avoid blocking
+    if(m_cGoStraightAngleRange.WithinMinBoundIncludedMaxBoundIncluded(aux))
+        aux = ToRadians(CDegrees(0));
 
-   /* Wheel speeds based on current turning state */
-   Real fSpeed1, fSpeed2;
-   switch(m_sWheelTurningParams.TurningMechanism) {
-      case SWheelTurningParams::NO_TURN: {
-         /* Just go straight */
-         fSpeed1 = fBaseAngularWheelSpeed;
-         fSpeed2 = fBaseAngularWheelSpeed;
-         break;
-      }
-      case SWheelTurningParams::SOFT_TURN: {
-         /* Both wheels go straight, but one is faster than the other */
-         Real fSpeedFactor = (m_sWheelTurningParams.HardTurnOnAngleThreshold - diff) / m_sWheelTurningParams.HardTurnOnAngleThreshold;
-         fSpeed1 = fBaseAngularWheelSpeed - fBaseAngularWheelSpeed * (1.0 - fSpeedFactor);
-         fSpeed2 = fBaseAngularWheelSpeed + fBaseAngularWheelSpeed * (1.0 - fSpeedFactor);
-         break;
-      }
-      case SWheelTurningParams::HARD_TURN: {
-         /* Opposite wheel speeds */
-         if (c_heading.Length()<0) {
-            SpeedLim  = m_sWheelTurningParams.MaxSpeed * 0.05;
-         }
-         else {
-            SpeedLim  = m_sWheelTurningParams.MaxSpeed ;
-         }
-         fSpeed1 = -SpeedLim;
-         fSpeed2 =  SpeedLim;
-         break;
-      }
-   }
-   /* Apply the calculated speeds to the appropriate wheels */
-   Real fLeftWheelSpeed, fRightWheelSpeed;
-   if(cHeadingAngle > CRadians::ZERO) {
-      /* Turn Left */
-      fLeftWheelSpeed  = fSpeed1;
-      fRightWheelSpeed = fSpeed2;
-   }
-   else {
-      /* Turn Right */
-      fLeftWheelSpeed  = fSpeed2;
-      fRightWheelSpeed = fSpeed1;
-   }
-   /* Finally, set the wheel speeds */
-   LOG <<"Turn : " << m_sWheelTurningParams.TurningMechanism << std::endl;
-   m_pcWheels->SetLinearVelocity(fLeftWheelSpeed, fRightWheelSpeed);
+    if(obstacle.Length() != 0)
+        return CVector2(1 / (obstacle.Length() + 0.5), aux + ToRadians(CDegrees(180)));
+
+    else
+        return CVector2(obstacle.Length(), aux + ToRadians(CDegrees(180)));
 }
 
-/****************************************/
-/****************************************/
+CVector2 CFootBotRX::ObjectRepulsionLocal(const CVector2 obstacle)
+{
+    CRadians aux = obstacle.Angle();
 
-CVector2 CFootBotDiffusion::VectorToRobot(const CCI_ColoredBlobOmnidirectionalCameraSensor::SReadings& sReadings) {
-   
-   /* Go through the camera readings to calculate the vector */
-   if(! sReadings.BlobList.empty()) {
-      CVector2 out;
-      size_t BlobsSeen = 0;
+    // aux tolerance to avoid blocking
+    if(m_cGoStraightAngleRange.WithinMinBoundIncludedMaxBoundIncluded(aux))
+        aux = ToRadians(CDegrees(0));
 
-      for(size_t i = 0; i < sReadings.BlobList.size(); ++i) {
-
-         if(sReadings.BlobList[i]->Color == CColor::RED) {
-            
-            out = CVector2(sReadings.BlobList[i]->Distance , sReadings.BlobList[i]-> Angle);
-            BlobsSeen++;
-         }
-      }
-      if(BlobsSeen > 0) {
-         // Clamp the length of the vector to the max speed 
-         /*if(out.Length() > m_sWheelTurningParams.MaxSpeed) {
-            out.Normalize();
-            out *= m_sWheelTurningParams.MaxSpeed;
-         }*/
-         argos::LOG << "1" << std::endl;
-         return out;
-      }
-      else
-         argos::LOG << "2" << std::endl;
-         return CVector2();
-   }
-   else {
-      argos::LOG << "3" << std::endl;
-      return CVector2();
-   }
+    return CVector2(obstacle.Length(), aux + ToRadians(CDegrees(180)));
 }
 
-/****************************************/
-/****************************************/
+void CFootBotRX::SetWheelSpeedsFromVector(const CVector2& c_heading)
+{
+    Real SpeedLim = 0;
+    /* Get the heading angle */
+    CRadians cHeadingAngle = c_heading.Angle().SignedNormalize();
+    /* Get the length of the heading vector */
+    Real fHeadingLength = c_heading.Length();
+    // if (fHeadingLength < 5) {diff = CRadians(0);}
+    /* Clamp the speed so that it's not greater than MaxSpeed */
+    Real fBaseAngularWheelSpeed = Max<Real>(fHeadingLength, m_sWheelTurningParams.MaxSpeed);
+    /* State transition logic */
+    if(m_sWheelTurningParams.TurningMechanism == SWheelTurningParams::HARD_TURN)
+    {
+        if(Abs(cHeadingAngle) <= m_sWheelTurningParams.SoftTurnOnAngleThreshold)
+        {
+            m_sWheelTurningParams.TurningMechanism = SWheelTurningParams::SOFT_TURN;
+        }
+    }
+    if(m_sWheelTurningParams.TurningMechanism == SWheelTurningParams::SOFT_TURN)
+    {
+        if(Abs(cHeadingAngle) > m_sWheelTurningParams.HardTurnOnAngleThreshold)
+        {
+            m_sWheelTurningParams.TurningMechanism = SWheelTurningParams::HARD_TURN;
+        }
+        else if(Abs(cHeadingAngle) <= m_sWheelTurningParams.NoTurnAngleThreshold)
+        {
+            m_sWheelTurningParams.TurningMechanism = SWheelTurningParams::NO_TURN;
+        }
+    }
+    if(m_sWheelTurningParams.TurningMechanism == SWheelTurningParams::NO_TURN)
+    {
+        if(Abs(cHeadingAngle) > m_sWheelTurningParams.HardTurnOnAngleThreshold)
+        {
+            m_sWheelTurningParams.TurningMechanism = SWheelTurningParams::HARD_TURN;
+        }
+        else if(Abs(cHeadingAngle) > m_sWheelTurningParams.NoTurnAngleThreshold)
+        {
+            m_sWheelTurningParams.TurningMechanism = SWheelTurningParams::SOFT_TURN;
+        }
+    }
 
-CVector2 CFootBotDiffusion::ReadProxSensor() {
-   /* Get readings from proximity sensor */
-   const CCI_FootBotProximitySensor::TReadings& tProxReads = m_pcProximity->GetReadings();
-   /* Sum them together */
-   CVector2 cAccumulator;
-   for(size_t i = 0; i < tProxReads.size(); ++i) {
-      cAccumulator += CVector2(tProxReads[i].Value, tProxReads[i].Angle);
-      //argos::LOG << tProxReads[i].Value<<"----"<<tProxReads[i].Angle<< std::endl;
-   }
-   cAccumulator /= tProxReads.size();
-   
-   return cAccumulator;
-   
-  
+    /* Wheel speeds based on current turning state */
+    Real fSpeed1, fSpeed2;
+    switch(m_sWheelTurningParams.TurningMechanism)
+    {
+        case SWheelTurningParams::NO_TURN:
+        {
+            /* Just go straight */
+            fSpeed1 = fBaseAngularWheelSpeed;
+            fSpeed2 = fBaseAngularWheelSpeed;
+            break;
+        }
+        case SWheelTurningParams::SOFT_TURN:
+        {
+            /* Both wheels go straight, but one is faster than the other */
+            Real fSpeedFactor = (m_sWheelTurningParams.HardTurnOnAngleThreshold - Abs(cHeadingAngle)) /
+                                m_sWheelTurningParams.HardTurnOnAngleThreshold;
+            fSpeed1 = fBaseAngularWheelSpeed - fBaseAngularWheelSpeed * (1.0 - fSpeedFactor);
+            fSpeed2 = fBaseAngularWheelSpeed + fBaseAngularWheelSpeed * (1.0 - fSpeedFactor);
+            break;
+        }
+        case SWheelTurningParams::HARD_TURN:
+        {
+            fSpeed1 = -0.8 * m_sWheelTurningParams.MaxSpeed;
+            fSpeed2 = 0.8 * m_sWheelTurningParams.MaxSpeed;
+            break;
+        }
+    }
+    /* Apply the calculated speeds to the appropriate wheels */
+    Real fLeftWheelSpeed, fRightWheelSpeed;
+    if(cHeadingAngle > CRadians::ZERO)
+    {
+        /* Turn Left */
+        fLeftWheelSpeed = fSpeed1;
+        fRightWheelSpeed = fSpeed2;
+    }
+    else
+    {
+        /* Turn Right */
+        fLeftWheelSpeed = fSpeed2;
+        fRightWheelSpeed = fSpeed1;
+    }
+    /* Finally, set the wheel speeds */
+    m_pcWheels->SetLinearVelocity(fLeftWheelSpeed, fRightWheelSpeed);
 }
 
-CVector2 CFootBotDiffusion::ObjectRepulsion(const CVector2 obstacle  , const CRadians orient) {
-   CDegrees inv = CDegrees(180);
-   CRadians aux = obstacle.Angle() + orient ;
-   CVector2 out = CVector2(obstacle.Length() , aux + ToRadians(inv));
-   return out;
-}
-
-
-
-/*
- * This statement notifies ARGoS of the existence of the controller.
- * It binds the class passed as first argument to the string passed as
- * second argument.
- * The string is then usable in the configuration file to refer to this
- * controller.
- * When ARGoS reads that string in the configuration file, it knows which
- * controller class to instantiate.
- * See also the configuration files for an example of how this is used.
- */
-REGISTER_CONTROLLER(CFootBotDiffusion, "footbot_diffusion_rx_controller")
+/* This statement notifies ARGoS of the existence of the controller.*/
+REGISTER_CONTROLLER(CFootBotRX, "footbot_diffusion_rx_controller")
