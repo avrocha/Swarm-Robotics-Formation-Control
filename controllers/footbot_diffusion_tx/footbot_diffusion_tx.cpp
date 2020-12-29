@@ -187,7 +187,6 @@ bool CFootBotTX::CreateFormation()
         return 0;
     }
 
-    temp_ID = 0;
     return 1;
 }
 
