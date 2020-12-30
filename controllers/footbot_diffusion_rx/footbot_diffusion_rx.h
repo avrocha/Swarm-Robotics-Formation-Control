@@ -103,7 +103,7 @@ class CFootBotRX : public CCI_Controller
 
   protected:
     /* Creates an object repulsion vector */
-    CVector2 ReceiveMasterPosition();
+    CVector2 ReceiveMasterPosition(Real &masterOrient);
     /* Creates an object repulsion vector */
     CVector2 ReadProxSensor();
     /* Creates an object repulsion vector, in global coordinates */

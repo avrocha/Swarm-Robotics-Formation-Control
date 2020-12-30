@@ -85,7 +85,7 @@ void CFootBotTX::ControlStep()
     if(!CreateFormation())
     {
         argos::LOG << "Creating formation" << std::endl;
-    }
+    }   
     else
     {
         TransmitPosition();
@@ -162,13 +162,29 @@ void CFootBotTX::TransmitPosition()
     m_pcTx->SetData(4, aux / 100);
     aux = aux - 100 * (aux / 100);
     m_pcTx->SetData(5, aux / 10);
+
+    //orientation (w/ 1 decimal case precision)
+    CRadians angle_aux;
+    CVector3 vec_aux;
+    pos.Orientation.ToAngleAxis(angle_aux, vec_aux);
+
+    int orientation = ToDegrees(10 * vec_aux[2] * angle_aux).GetValue();
+
+    argos::LOG << "master orientation sent: " << orientation << std::endl;
+
+    for(int i = 0; i < 4; i++)
+    {
+        m_pcTx->SetData(9 - i, orientation % 10);
+        orientation /= 10;
+    }
+
 }
 
 bool CFootBotTX::CreateFormation()
 {
     /* Assign slave positions */
     std::vector<int> distance = { (int)floor(sqrt(2) * 100 / 2), (int)floor(sqrt(2) * 100), 100, 100 };
-    std::vector<int> angle = { 45, 45, 90, 0 };
+    std::vector<int> angle = { 45, 45, 90, 0};//{ 0, 0, 135, 45 };
 
     if(temp_ID < distance.size() + 1)
     {

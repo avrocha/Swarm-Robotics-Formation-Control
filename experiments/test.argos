@@ -69,7 +69,7 @@
   <!-- *********************** -->
   <arena size="20, 20, 1" center="10,10,0.5">
     <light id="light"
-           position="19,12,0.99"
+           position="1, 19, 0.99"
            orientation="0,0,0"
            color="yellow"
            intensity="50"
@@ -112,30 +112,6 @@
       <body position="1.0, 1.0, 0.0" orientation="0,0,0" />
       <controller config="rxc"/>
     </foot-bot>
-
-    <!--
-        We distribute 5 boxes uniformly in position and rotation around Z.
-    -->
-    <distribute>
-      <position method="uniform" min="0,0,0" max="16,20,0" />
-      <orientation method="uniform" min="0,0,0" max="360,0,0" />
-      <entity quantity="0" max_trials="100">
-        <box id="b" size="0.2,0.2,0.2" mass ="0.1" movable="false" />
-      </entity>
-    </distribute>
-
-    <!--
-        We distribute cylinders uniformly in position and with
-        constant rotation (rotating a cylinder around Z does not
-        matter)
-    -->
-    <distribute>
-      <position method="uniform" min="2,2,0" max="20,20,0" />
-      <orientation method="constant" values="0,0,0" />
-      <entity quantity="100" max_trials="100">
-        <cylinder id="c" height="0.2" radius="0.15" mass ="0.1" movable="true" />
-      </entity>
-    </distribute>
 
   </arena>
     

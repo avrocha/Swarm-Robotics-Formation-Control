@@ -87,27 +87,32 @@ void CFootBotRX::ControlStep()
         AcquirePosition();
     }
     else
-    {
+    {   
+        // master orientation offset
+        Real masterOrientOffset;
+
         // master position in global coordinates
-        const CVector2 masterPos = ReceiveMasterPosition();
+        const CVector2 masterPos = ReceiveMasterPosition(masterOrientOffset);
+        argos::LOG << "test reference orient offset: " << masterOrientOffset << std::endl;
 
         // check self position and orientation, in global coordinates
         const CCI_PositioningSensor::SReading& pos = m_pos->GetReading();
 
+        //global orientation
+        CRadians angle_aux;
+        CVector3 vec_aux;
+        pos.Orientation.ToAngleAxis(angle_aux, vec_aux);
+    
         /* Caculate Formation Control vector */
 
         // calculate fixed following position vector, in local coordinates
-        CVector2 desired = CVector2(m_FollowingParams.dist / 100, m_FollowingParams.ang);
+        CVector2 desired = CVector2(m_FollowingParams.dist / 100, ToRadians(ToDegrees(m_FollowingParams.ang) + CDegrees(masterOrientOffset) - CDegrees(45)));
 
         // calculate vector to master from its actual position, in local coordinates
         CVector2 actual = CVector2(masterPos.GetX() - pos.Position[0], masterPos.GetY() - pos.Position[1]);
 
         // calculate vector to following position, in local coordinates
         CVector2 goToFormation = CVector2(actual.GetX() - desired.GetX(), actual.GetY() - desired.GetY());
-
-        CRadians angle_aux;
-        CVector3 vec_aux;
-        pos.Orientation.ToAngleAxis(angle_aux, vec_aux);
 
         goToFormation = CVector2(goToFormation.Length(), goToFormation.Angle() - vec_aux[2] * angle_aux);
 
@@ -148,6 +153,7 @@ void CFootBotRX::ControlStep()
 
         // debug - temp
         argos::LOG << "SLAVE:" << std::endl;
+        argos::LOG << "desired:  " << desired.Length() << " | " << ToDegrees(desired.Angle()) << std::endl;
         argos::LOG << "f_ctrl:  " << goToFormation.Length() << " | " << ToDegrees(goToFormation.Angle()) << std::endl;
         argos::LOG << "obj_rep: " << objectRep.Length() << "|" << ToDegrees(objectRep.Angle()) << std::endl;
         argos::LOG << "light:   " << light.Length() << "|" << ToDegrees(light.Angle()) << std::endl;
@@ -181,14 +187,16 @@ void CFootBotRX::AcquirePosition()
     }
 }
 
-CVector2 CFootBotRX::ReceiveMasterPosition()
+CVector2 CFootBotRX::ReceiveMasterPosition(Real &masterOrient)
 {
     Real x, y;
-    // Receive info from TX
+
     const CCI_RangeAndBearingSensor::TReadings& tPackets = m_pcRx->GetReadings();
-    // Transform it
+
     x = tPackets[0].Data[0] + 0.1 * tPackets[0].Data[1] + 0.01 * tPackets[0].Data[2];
     y = tPackets[0].Data[3] + 0.1 * tPackets[0].Data[4] + 0.01 * tPackets[0].Data[5];
+
+    masterOrient = 100*tPackets[0].Data[6] + 10 * tPackets[0].Data[7] + tPackets[0].Data[8] + 0.1*tPackets[0].Data[9];
 
     return CVector2(x, y);
 }
