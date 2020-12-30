@@ -93,7 +93,6 @@ void CFootBotRX::ControlStep()
 
         // master position in global coordinates
         const CVector2 masterPos = ReceiveMasterPosition(masterOrientOffset);
-        argos::LOG << "test reference orient offset: " << masterOrientOffset << std::endl;
 
         // check self position and orientation, in global coordinates
         const CCI_PositioningSensor::SReading& pos = m_pos->GetReading();
@@ -122,8 +121,8 @@ void CFootBotRX::ControlStep()
         CVector2 objectPos = ReadProxSensor();
 
         // obstacle inverse vector, in local coordinates
-        // CVector2 objectRep = ObjectRepulsion(objectPos, vec_aux[2] * angle_aux);
-        CVector2 objectRep = ObjectRepulsion(objectPos, CRadians(0));
+        CVector2 objectRep = ObjectRepulsionLocal(objectPos);
+
 
         /* Calculate light vector, if unseen use last known coordinates, adjusted to new orientation */
 
