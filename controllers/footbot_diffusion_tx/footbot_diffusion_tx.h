@@ -99,6 +99,8 @@ class CFootBotTX : public CCI_Controller
     bool CreateFormation();
     /* Assigns slave position */
     void AssignPosition(int ID, int distance, int angle);
+    /* Returns number of acknowledge slaves */
+    int CheckACK();
     /* Returns near object position */
     CVector2 ReadProxSensor();
     /* Creates an object repulsion vector, in global coordinates */
@@ -175,6 +177,9 @@ class CFootBotTX : public CCI_Controller
 
     /* Global change formation threshold */
     int changeFormation;
+
+    /* ACKs vector */
+    std::vector<int> ack_vec;
 
     /* Formations */
     std::vector<int> distanceSquare;

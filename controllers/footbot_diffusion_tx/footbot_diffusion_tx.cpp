@@ -80,6 +80,9 @@ void CFootBotTX::Init(TConfigurationNode& t_node)
 
     // Turn on red LED
     m_leds->SetSingleColor(12, CColor::RED);
+
+    //initialize ACKs vector 
+    ack_vec = std::vector<int>(m_num_slaves,0);
 }
 
 void CFootBotTX::Reset() { m_pcTx->ClearData(); }
@@ -87,35 +90,46 @@ void CFootBotTX::Reset() { m_pcTx->ClearData(); }
 void CFootBotTX::ControlStep()
 {
     argos::LOG << "MASTER:" << std::endl;
-    if(!CreateFormation())
+    
+    // check self position and orientation, in global coordinates
+    const CCI_PositioningSensor::SReading& pos = m_pos->GetReading();
+        
+    /* Calculate light vector, if unseen use last known coordinates, adjusted to new orientation */
+
+    CRadians angle_aux;
+    CVector3 vec_aux;
+    pos.Orientation.ToAngleAxis(angle_aux, vec_aux);
+
+    if(VectorToLight().Length() != 0)
     {
-        argos::LOG << "Creating formation" << std::endl;
+        light = VectorToLight();
+        light_mode = 0;
+        angle_var_ref = vec_aux[2] * angle_aux;
+        TransmitPosition(light.Angle(), vec_aux[2] * angle_aux);
+    }
+    else
+    {
+        deduced_light = CVector2(light.Length(), light.Angle() + (angle_var_ref - vec_aux[2] * angle_aux));
+        light_mode = 1;
+        TransmitPosition(deduced_light.Angle(), vec_aux[2] * angle_aux);
+    }
+    
+    /* Nota temporária : Alex, quando fores retransmitir uma nova transmissão é 
+        importante que faças o seguinte: 
+        1) colocares o vetor ack_vec todo a zeros (ele está inicializado no Init()) 
+        2) limpes os buffers de transmissão  dos slaves no footbot_diffusion_rx.cpp (m_pcTx->ClearData();)
+        Penso que não me esqueço de nada ... 
+        */
+    int num_of_ACKs  = CheckACK();
+    
+    
+    if(!CreateFormation() || num_of_ACKs != m_num_slaves) 
+    {
+        argos::LOG << "Creating formation ... "  << std::endl;
     }   
     else
     {   
-        // check self position and orientation, in global coordinates
-        const CCI_PositioningSensor::SReading& pos = m_pos->GetReading();
-        
-        /* Calculate light vector, if unseen use last known coordinates, adjusted to new orientation */
-
-        CRadians angle_aux;
-        CVector3 vec_aux;
-        pos.Orientation.ToAngleAxis(angle_aux, vec_aux);
-
-        if(VectorToLight().Length() != 0)
-        {
-            light = VectorToLight();
-            light_mode = 0;
-            angle_var_ref = vec_aux[2] * angle_aux;
-            TransmitPosition(light.Angle(), vec_aux[2] * angle_aux);
-        }
-        else
-        {
-            deduced_light = CVector2(light.Length(), light.Angle() + (angle_var_ref - vec_aux[2] * angle_aux));
-            light_mode = 1;
-            TransmitPosition(deduced_light.Angle(), vec_aux[2] * angle_aux);
-        }
-
+       
         /* Detect objects and create an object repulsion vector */
 
         // object position in local coordinates
@@ -227,6 +241,25 @@ void CFootBotTX::AssignPosition(int ID, int distance, int angle)
         m_pcTx->SetData(8 - i, angle % 10);
         angle /= 10;
     }
+}
+
+int CFootBotTX::CheckACK()
+{
+    // Scanning info transmitted by slaves 
+    const CCI_RangeAndBearingSensor::TReadings& tPackets = m_pcRx->GetReadings();
+    
+    int sum = 0;
+    for(size_t i = 0; i < tPackets.size(); ++i){
+
+        int id = tPackets[i].Data[0];
+        // check if slave has already transmitted 
+        if (ack_vec[id-1]) {}
+        else {
+            ack_vec[id-1] = 1 ;
+        }
+        sum += ack_vec[i];
+    }
+    return sum ;
 }
 
 CVector2 CFootBotTX::VectorToLight()

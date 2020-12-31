@@ -183,7 +183,11 @@ void CFootBotRX::AcquirePosition()
 
         argos::LOG << "Slave " << id << " position decoded: " << m_FollowingParams.dist << "|"
                    << ToDegrees(m_FollowingParams.ang) << std::endl;
+        
         id_detected = 1;
+
+        // Sends ACK to master
+        m_pcTx->SetData(0,id);
     }
 }
 
