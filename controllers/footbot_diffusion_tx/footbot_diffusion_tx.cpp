@@ -43,7 +43,11 @@ CFootBotTX::CFootBotTX()
       light(),
       deduced_light(),
       angle_var_ref(ToRadians(CDegrees(0))),
-      temp_ID(0)
+      temp_ID(0),
+      distanceLine({50, 100, 150, 200}),
+      angleLine({0, 0, 0, 0}),
+      distanceSquare({(int)floor(sqrt(2) * 100 / 2), (int)floor(sqrt(2) * 100), 100, 100}),
+      angleSquare({ 0, 0, 315, 45})
 {}
 
 void CFootBotTX::Init(TConfigurationNode& t_node)
@@ -61,6 +65,7 @@ void CFootBotTX::Init(TConfigurationNode& t_node)
     m_cGoStraightAngleRange.Set(-ToRadians(m_cAlpha), ToRadians(m_cAlpha));
     GetNodeAttributeOrDefault(GetNode(t_node, "base"), "delta", m_fDelta, m_fDelta);
     GetNodeAttributeOrDefault(GetNode(t_node, "base"), "velocity", m_fWheelVelocity, m_fWheelVelocity);
+    GetNodeAttributeOrDefault(GetNode(t_node, "formation"), "behaviour", m_behaviour, m_behaviour);
     GetNodeAttributeOrDefault(GetNode(t_node, "formation"), "num_slaves", m_num_slaves, m_num_slaves);
 
     // Init sWheelTurning parameters
@@ -87,23 +92,10 @@ void CFootBotTX::ControlStep()
         argos::LOG << "Creating formation" << std::endl;
     }   
     else
-    {
-        TransmitPosition();
-
-        /* Detect objects and create an object repulsion vector */
-
-        // object position in local coordinates
-        CVector2 objectPos = ReadProxSensor();
-
+    {   
         // check self position and orientation, in global coordinates
         const CCI_PositioningSensor::SReading& pos = m_pos->GetReading();
-
-        // obstacle inverse vector, in local coordinates
-        CVector2 objectRep = ObjectRepulsionLocal(objectPos);
-
-        if(objectRep.Length() != 0)
-            objectRep.Normalize();
-
+        
         /* Calculate light vector, if unseen use last known coordinates, adjusted to new orientation */
 
         CRadians angle_aux;
@@ -115,12 +107,25 @@ void CFootBotTX::ControlStep()
             light = VectorToLight();
             light_mode = 0;
             angle_var_ref = vec_aux[2] * angle_aux;
+            TransmitPosition(light.Angle(), vec_aux[2] * angle_aux);
         }
         else
         {
             deduced_light = CVector2(light.Length(), light.Angle() + (angle_var_ref - vec_aux[2] * angle_aux));
             light_mode = 1;
+            TransmitPosition(deduced_light.Angle(), vec_aux[2] * angle_aux);
         }
+
+        /* Detect objects and create an object repulsion vector */
+
+        // object position in local coordinates
+        CVector2 objectPos = ReadProxSensor();
+        
+        // obstacle inverse vector, in local coordinates
+        CVector2 objectRep = ObjectRepulsionLocal(objectPos);
+
+        if(objectRep.Length() != 0)
+            objectRep.Normalize();      
 
         /* Resultant Vector */
         auto res = (1 - light_mode) * light * kFollowLight + light_mode * deduced_light * kFollowLight +
@@ -134,7 +139,6 @@ void CFootBotTX::ControlStep()
         SetWheelSpeedsFromVector(res);
 
         // debug - temp
-        argos::LOG << "MASTER:" << std::endl;
         argos::LOG << "obj_rep: " << objectRep.Length() << "|" << ToDegrees(objectRep.Angle()) << std::endl;
         argos::LOG << "light:   " << light.Length() << "|" << ToDegrees(light.Angle()) << std::endl;
         argos::LOG << "d_light: " << deduced_light.Length() << "|" << ToDegrees(deduced_light.Angle()) << std::endl;
@@ -144,7 +148,7 @@ void CFootBotTX::ControlStep()
     }
 }
 
-void CFootBotTX::TransmitPosition()
+void CFootBotTX::TransmitPosition(const CRadians &lightOrient, const CRadians &masterOrient)
 {
     const CCI_PositioningSensor::SReading& pos = m_pos->GetReading();
 
@@ -163,15 +167,10 @@ void CFootBotTX::TransmitPosition()
     aux = aux - 100 * (aux / 100);
     m_pcTx->SetData(5, aux / 10);
 
-    //orientation (w/ 1 decimal case precision)
-    CRadians angle_aux;
-    CVector3 vec_aux;
-    pos.Orientation.ToAngleAxis(angle_aux, vec_aux);
-
-    int orientation = ToDegrees(10 * vec_aux[2] * angle_aux).GetValue();
-
+    // light relative orientation
+    int orientation = ToDegrees(10 * (lightOrient + masterOrient)).GetValue();
     argos::LOG << "master orientation sent: " << orientation << std::endl;
-
+    
     for(int i = 0; i < 4; i++)
     {
         m_pcTx->SetData(9 - i, orientation % 10);
@@ -181,12 +180,9 @@ void CFootBotTX::TransmitPosition()
 }
 
 bool CFootBotTX::CreateFormation()
-{
-    /* Assign slave positions */
-    std::vector<int> distance = { (int)floor(sqrt(2) * 100 / 2), (int)floor(sqrt(2) * 100), 100, 100 };
-    std::vector<int> angle = { 45, 45, 90, 0};//{ 0, 0, 135, 45 };
-
-    if(temp_ID < distance.size() + 1)
+{   
+    
+    if(temp_ID < m_num_slaves + 1)
     {
         // offset start comms
         if(temp_ID == 0)
@@ -195,10 +191,17 @@ bool CFootBotTX::CreateFormation()
             temp_ID++;
         }
         else
-        {
-            argos::LOG << "Sending dist:" << distance[temp_ID - 1] << " ang:" << angle[temp_ID - 1] << std::endl;
-            AssignPosition(temp_ID, distance[temp_ID - 1], angle[temp_ID - 1]);
-            temp_ID++;
+        {   
+            argos::LOG << m_behaviour << std::endl;
+            if(!m_behaviour.compare("obstacle")){
+                argos::LOG << "Sending dist:" << distanceSquare[temp_ID - 1] << " ang:" << angleSquare[temp_ID - 1] << std::endl;
+                AssignPosition(temp_ID, distanceSquare[temp_ID - 1], angleSquare[temp_ID - 1]);
+                temp_ID++;
+            } else if(!m_behaviour.compare("tunel")){
+                argos::LOG << "Sending dist:" << distanceLine[temp_ID - 1] << " ang:" << angleLine[temp_ID - 1] << std::endl;
+                AssignPosition(temp_ID, distanceLine[temp_ID - 1], angleLine[temp_ID - 1]);
+                temp_ID++;
+            }
         }
         return 0;
     }

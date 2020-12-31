@@ -94,7 +94,7 @@ class CFootBotTX : public CCI_Controller
 
   protected:
     /* Broadcasts postition */
-    void TransmitPosition();
+    void TransmitPosition(const CRadians &lightOrient, const CRadians &masterOrient);
     /*Initial procedure to create formation*/
     bool CreateFormation();
     /* Assigns slave position */
@@ -125,10 +125,10 @@ class CFootBotTX : public CCI_Controller
     CCI_RangeAndBearingActuator* m_pcTx;
     // Pointer to the range and bearing sensor
     CCI_RangeAndBearingSensor* m_pcRx;
-
-    /* Number of slaves in this formation */
+    /* Desired behaviour */
+    std::string m_behaviour;
+    /* Number of slaves*/
     int m_num_slaves;
-
     /*
      * The following variables are used as parameters for the
      * algorithm. You can set their value in the <parameters> section
@@ -172,6 +172,17 @@ class CFootBotTX : public CCI_Controller
 
     /* ID global auxiliar*/
     int temp_ID;
+
+    /* Global change formation threshold */
+    int changeFormation;
+
+    /* Formations */
+    std::vector<int> distanceSquare;
+    std::vector<int> angleSquare;
+
+    std::vector<int> distanceLine;
+    std::vector<int> angleLine;
+
 };
 
 #endif

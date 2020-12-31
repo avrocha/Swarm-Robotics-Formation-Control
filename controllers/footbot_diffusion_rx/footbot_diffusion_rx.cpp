@@ -82,6 +82,7 @@ void CFootBotRX::Reset() { m_pcTx->ClearData(); }
 
 void CFootBotRX::ControlStep()
 {
+    argos::LOG << "SLAVE:" << std::endl;
     if(!id_detected)
     {
         AcquirePosition();
@@ -105,7 +106,7 @@ void CFootBotRX::ControlStep()
         /* Caculate Formation Control vector */
 
         // calculate fixed following position vector, in local coordinates
-        CVector2 desired = CVector2(m_FollowingParams.dist / 100, ToRadians(ToDegrees(m_FollowingParams.ang) + CDegrees(masterOrientOffset) - CDegrees(45)));
+        CVector2 desired = CVector2(m_FollowingParams.dist / 100, ToRadians(ToDegrees(m_FollowingParams.ang) + CDegrees(masterOrientOffset)));
 
         // calculate vector to master from its actual position, in local coordinates
         CVector2 actual = CVector2(masterPos.GetX() - pos.Position[0], masterPos.GetY() - pos.Position[1]);
