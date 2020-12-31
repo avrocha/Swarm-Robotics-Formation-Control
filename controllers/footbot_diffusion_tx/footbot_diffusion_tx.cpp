@@ -5,6 +5,7 @@
 /* 2D vector definition */
 #include <argos3/core/utility/math/vector2.h>
 
+#include <algorithm>
 #include <cmath>
 
 void CFootBotTX::SWheelTurningParams::Init(TConfigurationNode& t_node)
@@ -38,16 +39,18 @@ CFootBotTX::CFootBotTX()
       m_fDelta(0.5f),
       m_fWheelVelocity(2.5f),
       m_cGoStraightAngleRange(-ToRadians(m_cAlpha), ToRadians(m_cAlpha)),
-      kAvoidObstacle(3),
+      kAvoidObstacle(4),
       kFollowLight(0.8),
       light(),
       deduced_light(),
       angle_var_ref(ToRadians(CDegrees(0))),
       temp_ID(0),
-      distanceLine({50, 100, 150, 200}),
-      angleLine({0, 0, 0, 0}),
-      distanceSquare({(int)floor(sqrt(2) * 100 / 2), (int)floor(sqrt(2) * 100), 100, 100}),
-      angleSquare({ 0, 0, 315, 45})
+      distanceLine({ 100, 200, 300, 400 }),
+      angleLine({ 0, 0, 0, 0 }),
+      distanceSquare({ (int)floor(sqrt(2) * 100 / 2), (int)floor(sqrt(2) * 100), 100, 100 }),
+      angleSquare({ 0, 0, 315, 45 }),
+      distanceCurve({ 100, 100, 200, 200 }),
+      angleCurve({ 45, 315, 45, 315 })
 {}
 
 void CFootBotTX::Init(TConfigurationNode& t_node)
@@ -81,8 +84,8 @@ void CFootBotTX::Init(TConfigurationNode& t_node)
     // Turn on red LED
     m_leds->SetSingleColor(12, CColor::RED);
 
-    //initialize ACKs vector 
-    ack_vec = std::vector<int>(m_num_slaves,0);
+    // initialize ACKs vector
+    ack_vec = std::vector<int>(m_num_slaves, 0);
 }
 
 void CFootBotTX::Reset() { m_pcTx->ClearData(); }
@@ -90,10 +93,10 @@ void CFootBotTX::Reset() { m_pcTx->ClearData(); }
 void CFootBotTX::ControlStep()
 {
     argos::LOG << "MASTER:" << std::endl;
-    
+
     // check self position and orientation, in global coordinates
     const CCI_PositioningSensor::SReading& pos = m_pos->GetReading();
-        
+
     /* Calculate light vector, if unseen use last known coordinates, adjusted to new orientation */
 
     CRadians angle_aux;
@@ -113,33 +116,31 @@ void CFootBotTX::ControlStep()
         light_mode = 1;
         TransmitPosition(deduced_light.Angle(), vec_aux[2] * angle_aux);
     }
-    
-    /* Nota temporária : Alex, quando fores retransmitir uma nova transmissão é 
-        importante que faças o seguinte: 
-        1) colocares o vetor ack_vec todo a zeros (ele está inicializado no Init()) 
-        2) limpes os buffers de transmissão  dos slaves no footbot_diffusion_rx.cpp (m_pcTx->ClearData();)
-        Penso que não me esqueço de nada ... 
+
+    /* Nota temporária : Alex, quando fores retransmitir uma nova transmissão é
+        importante que faças o seguinte:
+        1) colocares o vetor ack_vec todo a zeros (ele está inicializado no Init())
+        2) limpes os buffers de transmissão dos slaves no footbot_diffusion_rx.cpp (m_pcTx->ClearData();)
+        Penso que não me esqueço de nada ...
         */
-    int num_of_ACKs  = CheckACK();
-    
-    
-    if(!CreateFormation() || num_of_ACKs != m_num_slaves) 
+    int num_of_ACKs = CheckACK();
+
+    if(!CreateFormation() || num_of_ACKs != m_num_slaves)
     {
-        argos::LOG << "Creating formation ... "  << std::endl;
-    }   
+        argos::LOG << "Creating formation ... " << std::endl;
+    }
     else
-    {   
-       
+    {
         /* Detect objects and create an object repulsion vector */
 
         // object position in local coordinates
         CVector2 objectPos = ReadProxSensor();
-        
+
         // obstacle inverse vector, in local coordinates
         CVector2 objectRep = ObjectRepulsionLocal(objectPos);
 
         if(objectRep.Length() != 0)
-            objectRep.Normalize();      
+            objectRep.Normalize();
 
         /* Resultant Vector */
         auto res = (1 - light_mode) * light * kFollowLight + light_mode * deduced_light * kFollowLight +
@@ -162,7 +163,7 @@ void CFootBotTX::ControlStep()
     }
 }
 
-void CFootBotTX::TransmitPosition(const CRadians &lightOrient, const CRadians &masterOrient)
+void CFootBotTX::TransmitPosition(const CRadians& lightOrient, const CRadians& masterOrient)
 {
     const CCI_PositioningSensor::SReading& pos = m_pos->GetReading();
 
@@ -184,18 +185,33 @@ void CFootBotTX::TransmitPosition(const CRadians &lightOrient, const CRadians &m
     // light relative orientation
     int orientation = ToDegrees(10 * (lightOrient + masterOrient)).GetValue();
     argos::LOG << "master orientation sent: " << orientation << std::endl;
-    
+
     for(int i = 0; i < 4; i++)
     {
         m_pcTx->SetData(9 - i, orientation % 10);
         orientation /= 10;
     }
-
 }
 
 bool CFootBotTX::CreateFormation()
-{   
-    
+{
+    if(ReadProxSensor().Length() > 0 && changeFormation == 0 && !m_behaviour.compare("tunel"))
+    {
+        std::fill(ack_vec.begin(), ack_vec.end(), 0);
+        m_pcTx->ClearData();
+        changeFormation = 1;
+        argos::LOG << "CHANGING FORMATION" << std::endl;
+        temp_ID = 0;
+
+        // CODE 9999999999 = switch formation */
+        for(int i = 0; i < 10; i++)
+        {
+            m_pcTx->SetData(i, 9);
+        }
+
+        return 0;
+    }
+
     if(temp_ID < m_num_slaves + 1)
     {
         // offset start comms
@@ -205,14 +221,25 @@ bool CFootBotTX::CreateFormation()
             temp_ID++;
         }
         else
-        {   
-            argos::LOG << m_behaviour << std::endl;
-            if(!m_behaviour.compare("obstacle")){
-                argos::LOG << "Sending dist:" << distanceSquare[temp_ID - 1] << " ang:" << angleSquare[temp_ID - 1] << std::endl;
+        {
+            if(changeFormation == 0 && (!m_behaviour.compare("obstacle_square") || !m_behaviour.compare("tunel")))
+            {
+                argos::LOG << "Sending dist:" << distanceSquare[temp_ID - 1] << " ang:" << angleSquare[temp_ID - 1]
+                           << std::endl;
                 AssignPosition(temp_ID, distanceSquare[temp_ID - 1], angleSquare[temp_ID - 1]);
                 temp_ID++;
-            } else if(!m_behaviour.compare("tunel")){
-                argos::LOG << "Sending dist:" << distanceLine[temp_ID - 1] << " ang:" << angleLine[temp_ID - 1] << std::endl;
+            }
+            else if(changeFormation == 0 && !m_behaviour.compare("obstacle_curve"))
+            {
+                argos::LOG << "Sending dist:" << distanceCurve[temp_ID - 1] << " ang:" << angleCurve[temp_ID - 1]
+                           << std::endl;
+                AssignPosition(temp_ID, distanceCurve[temp_ID - 1], angleCurve[temp_ID - 1]);
+                temp_ID++;
+            }
+            else if(changeFormation == 1)
+            {
+                argos::LOG << "Sending dist:" << distanceLine[temp_ID - 1] << " ang:" << angleLine[temp_ID - 1]
+                           << std::endl;
                 AssignPosition(temp_ID, distanceLine[temp_ID - 1], angleLine[temp_ID - 1]);
                 temp_ID++;
             }
@@ -245,21 +272,20 @@ void CFootBotTX::AssignPosition(int ID, int distance, int angle)
 
 int CFootBotTX::CheckACK()
 {
-    // Scanning info transmitted by slaves 
+    // Scanning info transmitted by slaves
     const CCI_RangeAndBearingSensor::TReadings& tPackets = m_pcRx->GetReadings();
-    
-    int sum = 0;
-    for(size_t i = 0; i < tPackets.size(); ++i){
 
+    int sum = 0;
+    for(size_t i = 0; i < tPackets.size(); ++i)
+    {
         int id = tPackets[i].Data[0];
-        // check if slave has already transmitted 
-        if (ack_vec[id-1]) {}
-        else {
-            ack_vec[id-1] = 1 ;
-        }
+        // check if slave has already transmitted
+        if(!ack_vec[id - 1])
+            ack_vec[id - 1] = 1;
+
         sum += ack_vec[i];
     }
-    return sum ;
+    return sum;
 }
 
 CVector2 CFootBotTX::VectorToLight()

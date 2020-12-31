@@ -36,8 +36,6 @@ class CFootBotRX : public CCI_Controller
     {
         Real dist;
         CRadians ang;
-
-        void Init(TConfigurationNode& t_tree);
     };
 
     struct SWheelTurningParams
@@ -103,7 +101,7 @@ class CFootBotRX : public CCI_Controller
 
   protected:
     /* Creates an object repulsion vector */
-    CVector2 ReceiveMasterPosition(Real &masterOrient);
+    CVector2 ReceiveMasterPosition(Real& masterOrient);
     /* Creates an object repulsion vector */
     CVector2 ReadProxSensor();
     /* Creates an object repulsion vector, in global coordinates */
@@ -111,7 +109,7 @@ class CFootBotRX : public CCI_Controller
     /* Acquire formation position, in local coordinates */
     CVector2 ObjectRepulsionLocal(const CVector2 obstacle);
     /* Acquire formation position*/
-    void AcquirePosition();
+    bool AcquirePosition();
     /* Calculates the vector to the closest light. */
     CVector2 VectorToLight();
     /* Gets a direction vector as input and transforms it into wheel actuation. */

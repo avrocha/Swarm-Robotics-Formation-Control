@@ -5,7 +5,6 @@
 /* 2D vector definition */
 #include <argos3/core/utility/math/vector2.h>
 
-/* STL string library*/
 #include <sstream>
 #include <string>
 
@@ -41,6 +40,7 @@ CFootBotRX::CFootBotRX()
       m_fDelta(0.5f),
       m_fWheelVelocity(2.5f),
       m_cGoStraightAngleRange(-ToRadians(m_cAlpha), ToRadians(m_cAlpha)),
+      m_FollowingParams(CFootBotRX::FollowingParams{ 0, CRadians(0) }),
       kAvoidObstacle(2.5),
       kFollowLight(0.06),
       kMantainFormation(0.5),
@@ -83,13 +83,12 @@ void CFootBotRX::Reset() { m_pcTx->ClearData(); }
 void CFootBotRX::ControlStep()
 {
     argos::LOG << "SLAVE:" << std::endl;
-    if(!id_detected)
+    if(!AcquirePosition())
     {
-        AcquirePosition();
+        argos::LOG << "slave waiting for position:" << std::endl;
     }
     else
-    {   
-        // master orientation offset
+    {    // master orientation offset
         Real masterOrientOffset;
 
         // master position in global coordinates
@@ -98,15 +97,16 @@ void CFootBotRX::ControlStep()
         // check self position and orientation, in global coordinates
         const CCI_PositioningSensor::SReading& pos = m_pos->GetReading();
 
-        //global orientation
+        // global orientation
         CRadians angle_aux;
         CVector3 vec_aux;
         pos.Orientation.ToAngleAxis(angle_aux, vec_aux);
-    
+
         /* Caculate Formation Control vector */
 
         // calculate fixed following position vector, in local coordinates
-        CVector2 desired = CVector2(m_FollowingParams.dist / 100, ToRadians(ToDegrees(m_FollowingParams.ang) + CDegrees(masterOrientOffset)));
+        CVector2 desired = CVector2(m_FollowingParams.dist / 100,
+                                    ToRadians(ToDegrees(m_FollowingParams.ang) + CDegrees(masterOrientOffset)));
 
         // calculate vector to master from its actual position, in local coordinates
         CVector2 actual = CVector2(masterPos.GetX() - pos.Position[0], masterPos.GetY() - pos.Position[1]);
@@ -123,7 +123,6 @@ void CFootBotRX::ControlStep()
 
         // obstacle inverse vector, in local coordinates
         CVector2 objectRep = ObjectRepulsionLocal(objectPos);
-
 
         /* Calculate light vector, if unseen use last known coordinates, adjusted to new orientation */
 
@@ -152,7 +151,6 @@ void CFootBotRX::ControlStep()
         SetWheelSpeedsFromVector(res);
 
         // debug - temp
-        argos::LOG << "SLAVE:" << std::endl;
         argos::LOG << "desired:  " << desired.Length() << " | " << ToDegrees(desired.Angle()) << std::endl;
         argos::LOG << "f_ctrl:  " << goToFormation.Length() << " | " << ToDegrees(goToFormation.Angle()) << std::endl;
         argos::LOG << "obj_rep: " << objectRep.Length() << "|" << ToDegrees(objectRep.Angle()) << std::endl;
@@ -164,7 +162,7 @@ void CFootBotRX::ControlStep()
     }
 }
 
-void CFootBotRX::AcquirePosition()
+bool CFootBotRX::AcquirePosition()
 {
     Real ID_Tx, distance_Tx, angle_Tx;
 
@@ -174,7 +172,14 @@ void CFootBotRX::AcquirePosition()
     int id;
     id_s >> id;
 
-    if(id == tPackets[0].Data[0])
+    if(tPackets[0].Data == CByteArray(10, 9))
+    {
+        argos::LOG << "received switch formation code" << std::endl;
+        id_detected = 0;
+        return 0;
+    }
+
+    if(id == tPackets[0].Data[0] && !id_detected)
     {
         m_FollowingParams.dist =
             1000 * tPackets[0].Data[1] + 100 * tPackets[0].Data[2] + 10 * tPackets[0].Data[3] + 1 * tPackets[0].Data[4];
@@ -183,15 +188,19 @@ void CFootBotRX::AcquirePosition()
 
         argos::LOG << "Slave " << id << " position decoded: " << m_FollowingParams.dist << "|"
                    << ToDegrees(m_FollowingParams.ang) << std::endl;
-        
-        id_detected = 1;
 
         // Sends ACK to master
-        m_pcTx->SetData(0,id);
+        m_pcTx->SetData(0, id);
+
+        id_detected = 1;
+
+        return 0;
     }
+
+    return 1;
 }
 
-CVector2 CFootBotRX::ReceiveMasterPosition(Real &masterOrient)
+CVector2 CFootBotRX::ReceiveMasterPosition(Real& masterOrient)
 {
     Real x, y;
 
@@ -200,7 +209,8 @@ CVector2 CFootBotRX::ReceiveMasterPosition(Real &masterOrient)
     x = tPackets[0].Data[0] + 0.1 * tPackets[0].Data[1] + 0.01 * tPackets[0].Data[2];
     y = tPackets[0].Data[3] + 0.1 * tPackets[0].Data[4] + 0.01 * tPackets[0].Data[5];
 
-    masterOrient = 100*tPackets[0].Data[6] + 10 * tPackets[0].Data[7] + tPackets[0].Data[8] + 0.1*tPackets[0].Data[9];
+    masterOrient =
+        100 * tPackets[0].Data[6] + 10 * tPackets[0].Data[7] + tPackets[0].Data[8] + 0.1 * tPackets[0].Data[9];
 
     return CVector2(x, y);
 }
@@ -321,12 +331,22 @@ void CFootBotRX::SetWheelSpeedsFromVector(const CVector2& c_heading)
         }
         case SWheelTurningParams::SOFT_TURN:
         {
-            /* Both wheels go straight, but one is faster than the other */
-            Real fSpeedFactor = (m_sWheelTurningParams.HardTurnOnAngleThreshold - Abs(cHeadingAngle)) /
-                                m_sWheelTurningParams.HardTurnOnAngleThreshold;
-            fSpeed1 = fBaseAngularWheelSpeed - fBaseAngularWheelSpeed * (1.0 - fSpeedFactor);
-            fSpeed2 = fBaseAngularWheelSpeed + fBaseAngularWheelSpeed * (1.0 - fSpeedFactor);
-            break;
+            // argos::LOG << " vec  " << fHeadingLength  << std::endl;
+            if(fHeadingLength > 0.7)
+            {
+                /* Both wheels go straight, but one is faster than the other */
+                Real fSpeedFactor = (m_sWheelTurningParams.HardTurnOnAngleThreshold - Abs(cHeadingAngle)) /
+                                    m_sWheelTurningParams.HardTurnOnAngleThreshold;
+                fSpeed1 = fBaseAngularWheelSpeed - fBaseAngularWheelSpeed * (1.0 - fSpeedFactor);
+                fSpeed2 = fBaseAngularWheelSpeed + fBaseAngularWheelSpeed * (1.0 - fSpeedFactor);
+                break;
+            }
+            else
+            {
+                fSpeed1 = -0.8 * m_sWheelTurningParams.MaxSpeed;
+                fSpeed2 = 0.8 * m_sWheelTurningParams.MaxSpeed;
+                break;
+            }
         }
         case SWheelTurningParams::HARD_TURN:
         {

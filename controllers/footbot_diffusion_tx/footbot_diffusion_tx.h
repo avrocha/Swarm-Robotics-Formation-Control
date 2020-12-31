@@ -94,7 +94,7 @@ class CFootBotTX : public CCI_Controller
 
   protected:
     /* Broadcasts postition */
-    void TransmitPosition(const CRadians &lightOrient, const CRadians &masterOrient);
+    void TransmitPosition(const CRadians& lightOrient, const CRadians& masterOrient);
     /*Initial procedure to create formation*/
     bool CreateFormation();
     /* Assigns slave position */
@@ -188,6 +188,8 @@ class CFootBotTX : public CCI_Controller
     std::vector<int> distanceLine;
     std::vector<int> angleLine;
 
+    std::vector<int> distanceCurve;
+    std::vector<int> angleCurve;
 };
 
 #endif
