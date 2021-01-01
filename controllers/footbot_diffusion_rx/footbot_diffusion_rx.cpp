@@ -150,6 +150,7 @@ void CFootBotRX::ControlStep()
         // resultant actuation from sum of vectors
         SetWheelSpeedsFromVector(res);
 
+        
         // debug - temp
         argos::LOG << "desired:  " << desired.Length() << " | " << ToDegrees(desired.Angle()) << std::endl;
         argos::LOG << "f_ctrl:  " << goToFormation.Length() << " | " << ToDegrees(goToFormation.Angle()) << std::endl;
