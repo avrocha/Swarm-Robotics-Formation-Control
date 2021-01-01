@@ -22,14 +22,12 @@
         <differential_steering implementation="default" />
         <leds                  implementation="default" medium="leds" />
         <range_and_bearing implementation="default" />
-        <footbot_distance_scanner implementation="default" />
       </actuators>
       <sensors>
         <footbot_light     implementation="rot_z_only" show_rays="true" />
         <footbot_proximity implementation="default" show_rays="false" />
         <positioning       implementation="default" />
         <range_and_bearing implementation="medium" medium="rab" />
-        <footbot_distance_scanner implementation="rot_z_only" show_rays="true" />
       </sensors>
       <params> 
         <base alpha="7.5" delta="0.1" velocity="20"/>

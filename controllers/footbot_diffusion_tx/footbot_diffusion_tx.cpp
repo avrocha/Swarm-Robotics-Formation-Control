@@ -62,11 +62,6 @@ void CFootBotTX::Init(TConfigurationNode& t_node)
     m_pos = GetSensor<CCI_PositioningSensor>("positioning");
     m_pcTx = GetActuator<CCI_RangeAndBearingActuator>("range_and_bearing");
     m_pcRx = GetSensor<CCI_RangeAndBearingSensor>("range_and_bearing");
-    m_dist_sens = GetSensor<CCI_FootBotDistanceScannerSensor>("footbot_distance_scanner");
-    m_dist_act = GetActuator<CCI_FootBotDistanceScannerActuator>("footbot_distance_scanner");
-
-    //Enable distance sensing 
-    m_dist_act->Enable();
 
     /* Parse the configuration file */
     GetNodeAttributeOrDefault(GetNode(t_node, "base"), "alpha", m_cAlpha, m_cAlpha);
@@ -93,7 +88,7 @@ void CFootBotTX::Init(TConfigurationNode& t_node)
     ack_vec = std::vector<int>(m_num_slaves, 0);
 }
 
-void CFootBotTX::Reset() { m_pcTx->ClearData(); m_dist_act->Enable();}
+void CFootBotTX::Reset() { m_pcTx->ClearData();}
 
 void CFootBotTX::ControlStep()
 {
@@ -156,9 +151,7 @@ void CFootBotTX::ControlStep()
         else
             res *= 0.08 * m_sWheelTurningParams.MaxSpeed;
 
-        //########### EXEMPLO ################
-        
-        CVector2 example = GetDistanceValues();
+     
 
         SetWheelSpeedsFromVector(res);
 
@@ -330,16 +323,6 @@ CVector2 CFootBotTX::ReadProxSensor()
 
     cAccumulator /= tProxReads.size();
 
-    return cAccumulator;
-}
-
-CVector2 CFootBotTX::GetDistanceValues(){
-    const CCI_FootBotDistanceScannerSensor::TReadingsMap& tDisranceReads = m_dist_sens->GetReadingsMap();
-    CVector2 cAccumulator;
-    for(CCI_FootBotDistanceScannerSensor::TReadingsMap::const_iterator it = tDisranceReads.begin(); it != tDisranceReads.end(); ++it)
-    {	
-        cAccumulator += CVector2(it->second, it->first);
-    }
     return cAccumulator;
 }
 
