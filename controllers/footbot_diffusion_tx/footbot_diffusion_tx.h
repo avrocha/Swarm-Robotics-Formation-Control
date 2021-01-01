@@ -24,6 +24,11 @@
 #include <argos3/plugins/robots/generic/control_interface/ci_range_and_bearing_actuator.h>
 /* Definition of the range and bearing sensor */
 #include <argos3/plugins/robots/generic/control_interface/ci_range_and_bearing_sensor.h>
+/* Distance scanner sensor */
+#include <argos3/plugins/robots/foot-bot/control_interface/ci_footbot_distance_scanner_sensor.h>
+/* Distance scanner actuator */ 
+#include <argos3/plugins/robots/foot-bot/control_interface/ci_footbot_distance_scanner_actuator.h>
+
 
 using namespace argos;
 
@@ -101,6 +106,8 @@ class CFootBotTX : public CCI_Controller
     void AssignPosition(int ID, int distance, int angle);
     /* Returns number of acknowledge slaves */
     int CheckACK();
+    // Gets distance sensor values 
+    CVector2 GetDistanceValues() ;
     /* Returns near object position */
     CVector2 ReadProxSensor();
     /* Creates an object repulsion vector, in global coordinates */
@@ -127,6 +134,9 @@ class CFootBotTX : public CCI_Controller
     CCI_RangeAndBearingActuator* m_pcTx;
     // Pointer to the range and bearing sensor
     CCI_RangeAndBearingSensor* m_pcRx;
+     //Distance scanner 
+    CCI_FootBotDistanceScannerSensor* m_dist_sens;
+    CCI_FootBotDistanceScannerActuator* m_dist_act;
     /* Desired behaviour */
     std::string m_behaviour;
     /* Number of slaves*/
