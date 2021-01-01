@@ -35,7 +35,7 @@
                        soft_turn_angle_threshold="100"
                        no_turn_angle_threshold="1"
                        max_speed="50" />
-        <formation behaviour="obstacle_square" num_slaves="4"/>
+        <formation behaviour="tunel" num_slaves="4"/>
       </params> 
     </footbot_diffusion_tx_controller>
 
@@ -69,7 +69,7 @@
   <!-- *********************** -->
   <arena size="20, 20, 1" center="10,10,0.5">
     <light id="light"
-           position="18, 16, 0.99"
+           position="15, 15, 0.99"
            orientation="0,0,0"
            color="yellow"
            intensity="50"
@@ -88,8 +88,15 @@
       <body position="0,10,0" orientation="0,0,0" />
     </box>
 
+    <box id="tunnel_south" size="10,0.1,0.3" movable="false">
+      <body position="8.74,8.34,0" orientation="45,0,0" />
+    </box>
+    <box id="tunnel_north" size="10,0.1,0.3" movable="false">
+      <body position="8.34,8.74,0" orientation="45,0,0" />
+    </box>
+
     <foot-bot id="fb_tx" rab_range="50" >
-      <body position="2, 2, 0.0" orientation="0,0,0" />
+      <body position="1, 1, 0.0" orientation="10, 0,0" />
       <controller config="txc"/>
     </foot-bot>
 
@@ -99,43 +106,19 @@
     </foot-bot>
 
     <foot-bot id="2" rab_range="50" omnidirectional_camera_aperture="89" >
-      <body position="0.5, 1.0, 0.0" orientation="0,0,0" />
+      <body position="0.5, 0.5, 0.0" orientation="0,0,0" />
       <controller config="rxc"/>
     </foot-bot>
 
     <foot-bot id="3" rab_range="50" omnidirectional_camera_aperture="89" >
-      <body position="1.0, 0.5, 0.0" orientation="0,0,0" />
+      <body position="0.5, 0.5, 0.0" orientation="0,0,0" />
       <controller config="rxc"/>
     </foot-bot>
 
     <foot-bot id="4" rab_range="50" omnidirectional_camera_aperture="89" >
-      <body position="1.0, 1.0, 0.0" orientation="0,0,0" />
+      <body position="0.5, 0.5, 0.0" orientation="0,0,0" />
       <controller config="rxc"/>
     </foot-bot>
-
-    <!--
-        We distribute 5 boxes uniformly in position and rotation around Z.
-    -->
-    <distribute>
-      <position method="uniform" min="0,0,0" max="16,20,0" />
-      <orientation method="uniform" min="0,0,0" max="360,0,0" />
-      <entity quantity="0" max_trials="100">
-        <box id="b" size="0.2,0.2,0.2" mass ="0.1" movable="false" />
-      </entity>
-    </distribute>
-
-    <!--
-        We distribute cylinders uniformly in position and with
-        constant rotation (rotating a cylinder around Z does not
-        matter)
-    -->
-    <distribute>
-      <position method="uniform" min="2,2,0" max="20,20,0" />
-      <orientation method="constant" values="0,0,0" />
-      <entity quantity="95" max_trials="100">
-        <cylinder id="c" height="0.2" radius="0.15" mass ="0.1" movable="false" />
-      </entity>
-    </distribute>
 
   </arena>
     
@@ -211,8 +194,8 @@
     <qt-opengl>
       
       <camera>
-        <!-- <placement idx="0" position="1,0,7" look_at="1,0,0" />
-        <placement idx="1" position="1,0,7" look_at="1,0,0" /> -->
+        <placement idx="0" position="5, 5, 7" look_at="5, 5.1, 0" />
+        <!-- <placement idx="1" position="1,0,7" look_at="1,0,0" />  -->
         <placement idx="2" position="5,5,12" look_at="6,6,0" />
         <!-- <placement idx="3" position="2,3,2" look_at="0,1,0" /> -->
       </camera>
