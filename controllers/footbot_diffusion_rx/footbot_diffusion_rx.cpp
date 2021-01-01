@@ -41,7 +41,7 @@ CFootBotRX::CFootBotRX()
       m_fWheelVelocity(2.5f),
       m_cGoStraightAngleRange(-ToRadians(m_cAlpha), ToRadians(m_cAlpha)),
       m_FollowingParams(CFootBotRX::FollowingParams{ 0, CRadians(0) }),
-      kAvoidObstacle(3),
+      kAvoidObstacle(15),
       kFollowLight(0.06),
       kMantainFormation(0.5),
       light(),
@@ -82,7 +82,7 @@ void CFootBotRX::Reset() { m_pcTx->ClearData(); }
 
 void CFootBotRX::ControlStep()
 {
-    argos::LOG << "SLAVE:" << std::endl;
+    argos::LOG << "SLAVE:" << GetId() <<  std::endl;
     if(!AcquirePosition())
     {
         argos::LOG << "slave waiting for position:" << std::endl;
@@ -150,7 +150,6 @@ void CFootBotRX::ControlStep()
         // resultant actuation from sum of vectors
         SetWheelSpeedsFromVector(res);
 
-        
         // debug - temp
         argos::LOG << "desired:  " << desired.Length() << " | " << ToDegrees(desired.Angle()) << std::endl;
         argos::LOG << "f_ctrl:  " << goToFormation.Length() << " | " << ToDegrees(goToFormation.Angle()) << std::endl;
@@ -332,7 +331,6 @@ void CFootBotRX::SetWheelSpeedsFromVector(const CVector2& c_heading)
         }
         case SWheelTurningParams::SOFT_TURN:
         {
-            // argos::LOG << " vec  " << fHeadingLength  << std::endl;
             if(fHeadingLength > 0.7)
             {
                 /* Both wheels go straight, but one is faster than the other */
