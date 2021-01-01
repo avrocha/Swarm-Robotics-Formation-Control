@@ -78,14 +78,18 @@ void CFootBotRX::Init(TConfigurationNode& t_node)
     }
 }
 
-void CFootBotRX::Reset() { m_pcTx->ClearData(); }
+void CFootBotRX::Reset() { 
+    m_pcTx->ClearData(); 
+    id_detected = 0;
+    m_FollowingParams = CFootBotRX::FollowingParams{ 0, CRadians(0) };
+}
 
 void CFootBotRX::ControlStep()
 {
-    argos::LOG << "SLAVE:" << GetId() <<  std::endl;
+    LOG << "SLAVE:" << GetId() <<  std::endl;
     if(!AcquirePosition())
     {
-        argos::LOG << "slave waiting for position:" << std::endl;
+        LOG << "Waiting for position ..." << std::endl;
     }
     else
     {    // master orientation offset
@@ -151,13 +155,8 @@ void CFootBotRX::ControlStep()
         SetWheelSpeedsFromVector(res);
 
         // debug - temp
-        argos::LOG << "desired:  " << desired.Length() << " | " << ToDegrees(desired.Angle()) << std::endl;
-        argos::LOG << "f_ctrl:  " << goToFormation.Length() << " | " << ToDegrees(goToFormation.Angle()) << std::endl;
-        argos::LOG << "obj_rep: " << objectRep.Length() << "|" << ToDegrees(objectRep.Angle()) << std::endl;
-        argos::LOG << "light:   " << light.Length() << "|" << ToDegrees(light.Angle()) << std::endl;
-        argos::LOG << "d_light: " << deduced_light.Length() << "|" << ToDegrees(deduced_light.Angle()) << std::endl;
-        argos::LOG << "res:     " << res.Length() << "|" << ToDegrees(res.Angle()) << std::endl;
-        argos::LOG << "res2:    " << res.Length() << "|" << ToDegrees(res.Angle() - vec_aux[2] * angle_aux)
+        LOG << "[LOCAL COORDINATES] Velocity :" << res.Length() << "|" << ToDegrees(res.Angle()) << std::endl;
+        LOG << "[GLOBAL COORDINATES] Velocity :" << res.Length() << "|" << ToDegrees(res.Angle() - vec_aux[2] * angle_aux)
                    << std::endl;
     }
 }
@@ -174,7 +173,7 @@ bool CFootBotRX::AcquirePosition()
 
     if(tPackets[0].Data == CByteArray(10, 9))
     {
-        argos::LOG << "received switch formation code" << std::endl;
+        LOG << "Received switch formation code :" << tPackets[0].Data << std::endl;
         id_detected = 0;
         return 0;
     }
@@ -186,7 +185,7 @@ bool CFootBotRX::AcquirePosition()
         m_FollowingParams.ang = ToRadians(CDegrees(1000 * tPackets[0].Data[5] + 100 * tPackets[0].Data[6] +
                                                    10 * tPackets[0].Data[7] + 1 * tPackets[0].Data[8]));
 
-        argos::LOG << "Slave " << id << " position decoded: " << m_FollowingParams.dist << "|"
+        LOG << "Formation position decoded :" << m_FollowingParams.dist << "|"
                    << ToDegrees(m_FollowingParams.ang) << std::endl;
 
         // Sends ACK to master

@@ -171,7 +171,7 @@ class CFootBotTX : public CCI_Controller
     CRadians angle_var_ref;
 
     /* Light Vector deduction mode*/
-    bool light_mode = 0;
+    bool light_mode;
 
     /* ID global auxiliar*/
     int temp_ID;

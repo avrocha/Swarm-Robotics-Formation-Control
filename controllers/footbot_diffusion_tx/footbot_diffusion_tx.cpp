@@ -50,7 +50,9 @@ CFootBotTX::CFootBotTX()
       distanceSquare({ (int)floor(sqrt(2) * 100 / 2), (int)floor(sqrt(2) * 100), 100, 100 }),
       angleSquare({ 0, 0, 315, 45 }),
       distanceCurve({ 100, 100, 200, 200 }),
-      angleCurve({ 45, 315, 45, 315 })
+      angleCurve({ 45, 315, 45, 315 }),
+      changeFormation(0),
+      light_mode(0)
 {}
 
 void CFootBotTX::Init(TConfigurationNode& t_node)
@@ -88,11 +90,15 @@ void CFootBotTX::Init(TConfigurationNode& t_node)
     ack_vec = std::vector<int>(m_num_slaves, 0);
 }
 
-void CFootBotTX::Reset() { m_pcTx->ClearData();}
+void CFootBotTX::Reset() { 
+    // m_pcTx->ClearData(); 
+    temp_ID = 0;
+    changeFormation = 0;
+}
 
 void CFootBotTX::ControlStep()
 {
-    argos::LOG << "MASTER:" << std::endl;
+    LOG << "MASTER:" << std::endl;
 
     // check self position and orientation, in global coordinates
     const CCI_PositioningSensor::SReading& pos = m_pos->GetReading();
@@ -117,17 +123,11 @@ void CFootBotTX::ControlStep()
         TransmitPosition(deduced_light.Angle(), vec_aux[2] * angle_aux);
     }
 
-    /* Nota temporária : Alex, quando fores retransmitir uma nova transmissão é
-        importante que faças o seguinte:
-        1) colocares o vetor ack_vec todo a zeros (ele está inicializado no Init())
-        2) limpes os buffers de transmissão dos slaves no footbot_diffusion_rx.cpp (m_pcTx->ClearData();)
-        Penso que não me esqueço de nada ...
-        */
     int num_of_ACKs = CheckACK();
 
     if(!CreateFormation() || num_of_ACKs != m_num_slaves)
     {
-        argos::LOG << "Creating formation ... " << std::endl;
+        LOG << "[!]Creating formation ... " << std::endl;
     }
     else
     {
@@ -151,16 +151,11 @@ void CFootBotTX::ControlStep()
         else
             res *= 0.08 * m_sWheelTurningParams.MaxSpeed;
 
-     
-
         SetWheelSpeedsFromVector(res);
 
         // debug - temp
-        argos::LOG << "obj_rep: " << objectRep.Length() << "|" << ToDegrees(objectRep.Angle()) << std::endl;
-        argos::LOG << "light:   " << light.Length() << "|" << ToDegrees(light.Angle()) << std::endl;
-        argos::LOG << "d_light: " << deduced_light.Length() << "|" << ToDegrees(deduced_light.Angle()) << std::endl;
-        argos::LOG << "res:     " << res.Length() << "|" << ToDegrees(res.Angle()) << std::endl;
-        argos::LOG << "res2:    " << res.Length() << "|" << ToDegrees(res.Angle() - vec_aux[2] * angle_aux)
+        LOG << "[LOCAL COORDINATES] Velocity :" << res.Length() << "|" << ToDegrees(res.Angle()) << std::endl;
+        LOG << "[GLOBAL COORDINATES] Velocity :" << res.Length() << "|" << ToDegrees(res.Angle() - vec_aux[2] * angle_aux)
                    << std::endl;
     }
 }
@@ -186,7 +181,6 @@ void CFootBotTX::TransmitPosition(const CRadians& lightOrient, const CRadians& m
 
     // light relative orientation
     int orientation = ToDegrees(10 * (lightOrient + masterOrient)).GetValue();
-    argos::LOG << "master orientation sent: " << orientation << std::endl;
 
     for(int i = 0; i < 4; i++)
     {
@@ -202,7 +196,7 @@ bool CFootBotTX::CreateFormation()
         std::fill(ack_vec.begin(), ack_vec.end(), 0);
         m_pcTx->ClearData();
         changeFormation = 1;
-        argos::LOG << "CHANGING FORMATION" << std::endl;
+        LOG << "[!]Switching Formation ..." << std::endl;
         temp_ID = 0;
 
         // CODE 9999999999 = switch formation */
@@ -226,21 +220,21 @@ bool CFootBotTX::CreateFormation()
         {
             if(changeFormation == 0 && (!m_behaviour.compare("obstacle_square") || !m_behaviour.compare("tunel")))
             {
-                argos::LOG << "Sending dist:" << distanceSquare[temp_ID - 1] << " ang:" << angleSquare[temp_ID - 1]
+                LOG << "Sending slave dist:" << distanceSquare[temp_ID - 1] << " ang:" << angleSquare[temp_ID - 1]
                            << std::endl;
                 AssignPosition(temp_ID, distanceSquare[temp_ID - 1], angleSquare[temp_ID - 1]);
                 temp_ID++;
             }
             else if(changeFormation == 0 && !m_behaviour.compare("obstacle_curve"))
             {
-                argos::LOG << "Sending dist:" << distanceCurve[temp_ID - 1] << " ang:" << angleCurve[temp_ID - 1]
+                LOG << "Sending slave position : dist:" << distanceCurve[temp_ID - 1] << " ang:" << angleCurve[temp_ID - 1]
                            << std::endl;
                 AssignPosition(temp_ID, distanceCurve[temp_ID - 1], angleCurve[temp_ID - 1]);
                 temp_ID++;
             }
             else if(changeFormation == 1)
             {
-                argos::LOG << "Sending dist:" << distanceLine[temp_ID - 1] << " ang:" << angleLine[temp_ID - 1]
+                LOG << "Sending slave dist:" << distanceLine[temp_ID - 1] << " ang:" << angleLine[temp_ID - 1]
                            << std::endl;
                 AssignPosition(temp_ID, distanceLine[temp_ID - 1], angleLine[temp_ID - 1]);
                 temp_ID++;
