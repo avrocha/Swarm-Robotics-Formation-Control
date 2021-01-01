@@ -27,6 +27,7 @@
 /* Definition of the omnidirectional camera sensor */
 #include <argos3/plugins/robots/generic/control_interface/ci_colored_blob_omnidirectional_camera_sensor.h>
 
+
 using namespace argos;
 
 class CFootBotRX : public CCI_Controller
