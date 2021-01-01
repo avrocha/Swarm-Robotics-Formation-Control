@@ -41,7 +41,7 @@ CFootBotRX::CFootBotRX()
       m_fWheelVelocity(2.5f),
       m_cGoStraightAngleRange(-ToRadians(m_cAlpha), ToRadians(m_cAlpha)),
       m_FollowingParams(CFootBotRX::FollowingParams{ 0, CRadians(0) }),
-      kAvoidObstacle(2.5),
+      kAvoidObstacle(3),
       kFollowLight(0.06),
       kMantainFormation(0.5),
       light(),

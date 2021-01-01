@@ -69,7 +69,7 @@
   <!-- *********************** -->
   <arena size="20, 20, 1" center="10,10,0.5">
     <light id="light"
-           position="2,17,0.99"
+           position="18, 16, 0.99"
            orientation="0,0,0"
            color="yellow"
            intensity="50"
@@ -132,8 +132,8 @@
     <distribute>
       <position method="uniform" min="2,2,0" max="20,20,0" />
       <orientation method="constant" values="0,0,0" />
-      <entity quantity="100" max_trials="100">
-        <cylinder id="c" height="0.2" radius="0.15" mass ="0.1" movable="true" />
+      <entity quantity="95" max_trials="100">
+        <cylinder id="c" height="0.2" radius="0.15" mass ="0.1" movable="false" />
       </entity>
     </distribute>
 
