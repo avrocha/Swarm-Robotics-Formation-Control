@@ -78,15 +78,16 @@ void CFootBotRX::Init(TConfigurationNode& t_node)
     }
 }
 
-void CFootBotRX::Reset() { 
-    m_pcTx->ClearData(); 
+void CFootBotRX::Reset()
+{
+    m_pcTx->ClearData();
     id_detected = 0;
     m_FollowingParams = CFootBotRX::FollowingParams{ 0, CRadians(0) };
 }
 
 void CFootBotRX::ControlStep()
 {
-    LOG << "SLAVE:" << GetId() <<  std::endl;
+    LOG << "SLAVE:" << GetId() << std::endl;
     if(!AcquirePosition())
     {
         LOG << "Waiting for position ..." << std::endl;
@@ -156,8 +157,8 @@ void CFootBotRX::ControlStep()
 
         // debug - temp
         LOG << "[LOCAL COORDINATES] Velocity :" << res.Length() << "|" << ToDegrees(res.Angle()) << std::endl;
-        LOG << "[GLOBAL COORDINATES] Velocity :" << res.Length() << "|" << ToDegrees(res.Angle() - vec_aux[2] * angle_aux)
-                   << std::endl;
+        LOG << "[GLOBAL COORDINATES] Velocity :" << res.Length() << "|"
+            << ToDegrees(res.Angle() - vec_aux[2] * angle_aux) << std::endl;
     }
 }
 
@@ -185,8 +186,8 @@ bool CFootBotRX::AcquirePosition()
         m_FollowingParams.ang = ToRadians(CDegrees(1000 * tPackets[0].Data[5] + 100 * tPackets[0].Data[6] +
                                                    10 * tPackets[0].Data[7] + 1 * tPackets[0].Data[8]));
 
-        LOG << "Formation position decoded :" << m_FollowingParams.dist << "|"
-                   << ToDegrees(m_FollowingParams.ang) << std::endl;
+        LOG << "Formation position decoded :" << m_FollowingParams.dist << "|" << ToDegrees(m_FollowingParams.ang)
+            << std::endl;
 
         // Sends ACK to master
         m_pcTx->SetData(0, id);

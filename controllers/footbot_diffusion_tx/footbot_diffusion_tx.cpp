@@ -90,8 +90,9 @@ void CFootBotTX::Init(TConfigurationNode& t_node)
     ack_vec = std::vector<int>(m_num_slaves, 0);
 }
 
-void CFootBotTX::Reset() { 
-    // m_pcTx->ClearData(); 
+void CFootBotTX::Reset()
+{
+    // m_pcTx->ClearData();
     temp_ID = 0;
     changeFormation = 0;
 }
@@ -155,8 +156,8 @@ void CFootBotTX::ControlStep()
 
         // debug - temp
         LOG << "[LOCAL COORDINATES] Velocity :" << res.Length() << "|" << ToDegrees(res.Angle()) << std::endl;
-        LOG << "[GLOBAL COORDINATES] Velocity :" << res.Length() << "|" << ToDegrees(res.Angle() - vec_aux[2] * angle_aux)
-                   << std::endl;
+        LOG << "[GLOBAL COORDINATES] Velocity :" << res.Length() << "|"
+            << ToDegrees(res.Angle() - vec_aux[2] * angle_aux) << std::endl;
     }
 }
 
@@ -221,21 +222,21 @@ bool CFootBotTX::CreateFormation()
             if(changeFormation == 0 && (!m_behaviour.compare("obstacle_square") || !m_behaviour.compare("tunel")))
             {
                 LOG << "Sending slave dist:" << distanceSquare[temp_ID - 1] << " ang:" << angleSquare[temp_ID - 1]
-                           << std::endl;
+                    << std::endl;
                 AssignPosition(temp_ID, distanceSquare[temp_ID - 1], angleSquare[temp_ID - 1]);
                 temp_ID++;
             }
             else if(changeFormation == 0 && !m_behaviour.compare("obstacle_curve"))
             {
-                LOG << "Sending slave position : dist:" << distanceCurve[temp_ID - 1] << " ang:" << angleCurve[temp_ID - 1]
-                           << std::endl;
+                LOG << "Sending slave position : dist:" << distanceCurve[temp_ID - 1]
+                    << " ang:" << angleCurve[temp_ID - 1] << std::endl;
                 AssignPosition(temp_ID, distanceCurve[temp_ID - 1], angleCurve[temp_ID - 1]);
                 temp_ID++;
             }
             else if(changeFormation == 1)
             {
                 LOG << "Sending slave dist:" << distanceLine[temp_ID - 1] << " ang:" << angleLine[temp_ID - 1]
-                           << std::endl;
+                    << std::endl;
                 AssignPosition(temp_ID, distanceLine[temp_ID - 1], angleLine[temp_ID - 1]);
                 temp_ID++;
             }
