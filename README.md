@@ -25,5 +25,5 @@ argos3 -c experiments/<filename>.argos
 
 # Examples
 - Obstacle Avoidance with Different Formations
-![Curve Shaped Formation] (images/test_3_c_3_cut.jpg)
+![Curve Shaped Formation] (https://github.com/avrocha/Swarm-Robotics-Formation-Control/images/test_3_c_3_cut.jpg)
 
