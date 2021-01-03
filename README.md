@@ -1,9 +1,8 @@
 # Swarm-Robotics-Formation-Control
-ROBO@FEUP Final Assignment
+ROBO@FEUP Final Assignment - Behaviour based multi-robot formation control with ARGoS simulator.
 
 # Requirements
 - argos3 simulator
-- (...) WIP
 
 # Clone
 ```shell
@@ -20,5 +19,6 @@ $ make
 
 # Run 
 ```shell
+cd argos3/src/Swarm-Robotics-Formation-Control
 argos3 -c experiments/<filename>.argos
 ```
