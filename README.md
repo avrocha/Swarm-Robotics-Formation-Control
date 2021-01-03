@@ -22,3 +22,8 @@ $ make
 cd argos3/src/Swarm-Robotics-Formation-Control
 argos3 -c experiments/<filename>.argos
 ```
+
+# Examples
+- Obstacle Avoidance with Different Formations
+![Curve Shaped Formation] (images/test_3_c_3_cut.jpg)
+
