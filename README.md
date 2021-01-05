@@ -1,5 +1,5 @@
 # Swarm-Robotics-Formation-Control
-ROBO@FEUP Final Assignment - Behaviour based multi-robot formation control with ARGoS simulator.
+ROBO@FEUP Final Assignment - Multi-robot formation control with ARGoS simulator.
 
 # Requirements
 - argos3 simulator
