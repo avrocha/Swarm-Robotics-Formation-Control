@@ -3,6 +3,7 @@ ROBO@FEUP Final Assignment - Multi-robot formation control with ARGoS simulator.
 
 # Requirements
 - argos3 simulator
+- cmake
 
 # Clone
 ```shell
